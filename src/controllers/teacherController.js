@@ -2,8 +2,9 @@ const pool = require('../db/pool');
 
 // PUT /api/teachers/me — teacher updates their own profile
 async function updateMyProfile(req, res) {
-  const { bio, governorate, latitude, longitude, subjects } = req.body;
+  const { bio, governorate, latitude, longitude, subjects, areas } = req.body;
   // subjects: [{ subject_id, price_per_hour }]
+  // areas: ["Bardo", "El Manar", ...]
 
   try {
     const profileResult = await pool.query(
@@ -37,6 +38,17 @@ async function updateMyProfile(req, res) {
       }
     }
 
+    if (Array.isArray(areas)) {
+      await pool.query('DELETE FROM teacher_areas WHERE teacher_id = $1', [teacherId]);
+      for (const areaName of areas) {
+        await pool.query(
+          `INSERT INTO teacher_areas (teacher_id, area_name) VALUES ($1, $2)
+           ON CONFLICT (teacher_id, area_name) DO NOTHING`,
+          [teacherId, areaName]
+        );
+      }
+    }
+
     res.json({ message: 'Profil mis à jour. En attente de validation si modifié.' });
   } catch (err) {
     console.error(err);
@@ -62,10 +74,10 @@ async function uploadPhoto(req, res) {
   }
 }
 
-// GET /api/teachers/search?subject=Mathématiques&governorate=Tunis&q=ahmed
+// GET /api/teachers/search?subject=Mathématiques&governorate=Tunis&area=Bardo&q=ahmed
 // Public endpoint — only returns approved teachers with an active subscription
 async function search(req, res) {
-  const { subject, governorate, q } = req.query;
+  const { subject, governorate, area, q } = req.query;
 
   try {
     const conditions = [`tp.status = 'approved'`, `s.payment_status = 'paid'`, `s.ends_at > NOW()`];
@@ -90,6 +102,15 @@ async function search(req, res) {
       )`;
     }
 
+    let areaFilter = '';
+    if (area) {
+      params.push(area);
+      areaFilter = `AND EXISTS (
+        SELECT 1 FROM teacher_areas ta2
+        WHERE ta2.teacher_id = tp.id AND ta2.area_name = $${params.length}
+      )`;
+    }
+
     const sql = `
       SELECT DISTINCT tp.id, u.full_name, tp.photo_url, tp.governorate, tp.bio,
         COALESCE(AVG(r.score), 0)::float AS rating,
@@ -98,7 +119,7 @@ async function search(req, res) {
       JOIN users u ON u.id = tp.user_id
       JOIN subscriptions s ON s.teacher_id = tp.id
       LEFT JOIN ratings r ON r.teacher_id = tp.id
-      WHERE ${conditions.join(' AND ')} ${subjectFilter}
+      WHERE ${conditions.join(' AND ')} ${subjectFilter} ${areaFilter}
       GROUP BY tp.id, u.full_name, tp.photo_url, tp.governorate, tp.bio
       ORDER BY rating DESC
       LIMIT 50;
@@ -106,17 +127,24 @@ async function search(req, res) {
 
     const result = await pool.query(sql, params);
 
-    // Attach subjects+prices for each teacher
+    // Attach subjects+prices and areas for each teacher
     const teachers = await Promise.all(
       result.rows.map(async (t) => {
-        const subjResult = await pool.query(
-          `SELECT sub.name, ts.price_per_hour
-           FROM teacher_subjects ts
-           JOIN subjects sub ON sub.id = ts.subject_id
-           WHERE ts.teacher_id = $1`,
-          [t.id]
-        );
-        return { ...t, subjects: subjResult.rows };
+        const [subjResult, areaResult] = await Promise.all([
+          pool.query(
+            `SELECT sub.name, ts.price_per_hour
+             FROM teacher_subjects ts
+             JOIN subjects sub ON sub.id = ts.subject_id
+             WHERE ts.teacher_id = $1`,
+            [t.id]
+          ),
+          pool.query(`SELECT area_name FROM teacher_areas WHERE teacher_id = $1`, [t.id]),
+        ]);
+        return {
+          ...t,
+          subjects: subjResult.rows,
+          areas: areaResult.rows.map((r) => r.area_name),
+        };
       })
     );
 
@@ -146,15 +174,24 @@ async function getById(req, res) {
       return res.status(404).json({ error: 'Professeur introuvable ou non disponible.' });
     }
 
-    const subjResult = await pool.query(
-      `SELECT sub.name, ts.price_per_hour
-       FROM teacher_subjects ts
-       JOIN subjects sub ON sub.id = ts.subject_id
-       WHERE ts.teacher_id = $1`,
-      [req.params.id]
-    );
+    const [subjResult, areaResult] = await Promise.all([
+      pool.query(
+        `SELECT sub.name, ts.price_per_hour
+         FROM teacher_subjects ts
+         JOIN subjects sub ON sub.id = ts.subject_id
+         WHERE ts.teacher_id = $1`,
+        [req.params.id]
+      ),
+      pool.query(`SELECT area_name FROM teacher_areas WHERE teacher_id = $1`, [req.params.id]),
+    ]);
 
-    res.json({ teacher: { ...result.rows[0], subjects: subjResult.rows } });
+    res.json({
+      teacher: {
+        ...result.rows[0],
+        subjects: subjResult.rows,
+        areas: areaResult.rows.map((r) => r.area_name),
+      },
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erreur serveur.' });
