@@ -1,5 +1,6 @@
 const express = require('express');
 const pool = require('../db/pool');
+const AREAS_BY_GOVERNORATE = require('../data/areas');
 
 const router = express.Router();
 
@@ -22,6 +23,16 @@ router.get('/subjects', async (req, res) => {
 
 router.get('/governorates', (req, res) => {
   res.json({ governorates: GOVERNORATES });
+});
+
+// GET /api/areas?governorate=Tunis — returns the list of areas/delegations for that governorate
+router.get('/areas', (req, res) => {
+  const { governorate } = req.query;
+  if (!governorate) {
+    return res.status(400).json({ error: 'Le paramètre governorate est requis.' });
+  }
+  const areas = AREAS_BY_GOVERNORATE[governorate] || [];
+  res.json({ areas });
 });
 
 module.exports = router;
