@@ -72,8 +72,18 @@ CREATE TABLE IF NOT EXISTS prepaid_codes (
   used_at TIMESTAMP,
   created_at TIMESTAMP DEFAULT NOW()
 );
+-- Areas (delegations/neighborhoods) each teacher covers within their governorate.
+-- A teacher can tick multiple areas (e.g. a Tunis teacher covering Bardo + El Manar + El Menzah).
+CREATE TABLE IF NOT EXISTS teacher_areas (
+  id SERIAL PRIMARY KEY,
+  teacher_id INTEGER NOT NULL REFERENCES teacher_profiles(id) ON DELETE CASCADE,
+  area_name VARCHAR(100) NOT NULL,
+  UNIQUE(teacher_id, area_name)
+);
 
+CREATE INDEX IF NOT EXISTS idx_teacher_areas_name ON teacher_areas(area_name);
 CREATE INDEX IF NOT EXISTS idx_teacher_profiles_status ON teacher_profiles(status);
+
 CREATE INDEX IF NOT EXISTS idx_teacher_profiles_governorate ON teacher_profiles(governorate);
 CREATE INDEX IF NOT EXISTS idx_teacher_subjects_subject ON teacher_subjects(subject_id);
 CREATE INDEX IF NOT EXISTS idx_ratings_teacher ON ratings(teacher_id);
