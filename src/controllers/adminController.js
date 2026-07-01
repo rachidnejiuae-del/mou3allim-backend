@@ -1,10 +1,10 @@
 const pool = require('../db/pool');
 
-// GET /api/admin/teachers/pending — list profiles awaiting review
 async function listPending(req, res) {
   try {
     const result = await pool.query(
-      `SELECT tp.id, u.full_name, u.phone, tp.governorate, tp.bio, tp.photo_url, tp.created_at
+      `SELECT tp.id, u.full_name, u.phone, tp.governorate, tp.bio, tp.photo_url,
+              tp.certificate_url, tp.created_at
        FROM teacher_profiles tp
        JOIN users u ON u.id = tp.user_id
        WHERE tp.status = 'pending'
@@ -17,7 +17,6 @@ async function listPending(req, res) {
   }
 }
 
-// PATCH /api/admin/teachers/:id/approve
 async function approve(req, res) {
   try {
     await pool.query(
@@ -31,7 +30,6 @@ async function approve(req, res) {
   }
 }
 
-// PATCH /api/admin/teachers/:id/reject
 async function reject(req, res) {
   const { reason } = req.body;
   try {
