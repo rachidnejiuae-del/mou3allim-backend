@@ -80,9 +80,24 @@ CREATE TABLE IF NOT EXISTS teacher_areas (
   area_name VARCHAR(100) NOT NULL,
   UNIQUE(teacher_id, area_name)
 );
+-- OTP verification codes for phone number verification
+CREATE TABLE IF NOT EXISTS otp_codes (
+  id SERIAL PRIMARY KEY,
+  phone VARCHAR(20) NOT NULL,
+  code VARCHAR(6) NOT NULL,
+  expires_at TIMESTAMP NOT NULL,
+  used BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMP DEFAULT NOW()
+);
 
-CREATE INDEX IF NOT EXISTS idx_teacher_areas_name ON teacher_areas(area_name);
+CREATE INDEX IF NOT EXISTS idx_otp_codes_phone ON otp_codes(phone);
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_verified BOOLEAN DEFAULT FALSE;
+
+ALTER TABLE teacher_profiles ADD COLUMN IF NOT EXISTS certificate_url VARCHAR(500);
+
 CREATE INDEX IF NOT EXISTS idx_teacher_profiles_status ON teacher_profiles(status);
+CREATE INDEX IF NOT EXISTS idx_teacher_areas_name ON teacher_areas(area_name);
 
 CREATE INDEX IF NOT EXISTS idx_teacher_profiles_governorate ON teacher_profiles(governorate);
 CREATE INDEX IF NOT EXISTS idx_teacher_subjects_subject ON teacher_subjects(subject_id);
