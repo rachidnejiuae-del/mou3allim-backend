@@ -79,7 +79,7 @@ async function login(req, res) {
   }
 }
 
-module.exports = { register, login, bootstrapAdmin };
+
 
 // GET /api/auth/bootstrap-admin?phone=...&key=...
 async function bootstrapAdmin(req, res) {
@@ -103,3 +103,4 @@ async function bootstrapAdmin(req, res) {
     res.status(500).send('Erreur serveur.');
   }
 }
+module.exports = { register, login, bootstrapAdmin };
