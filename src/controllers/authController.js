@@ -80,3 +80,26 @@ async function login(req, res) {
 }
 
 module.exports = { register, login, bootstrapAdmin };
+
+// GET /api/auth/bootstrap-admin?phone=...&key=...
+async function bootstrapAdmin(req, res) {
+  const { phone, key } = req.query;
+  if (!process.env.ADMIN_SETUP_KEY || key !== process.env.ADMIN_SETUP_KEY) {
+    return res.status(403).send('Clé invalide.');
+  }
+  if (!phone) return res.status(400).send('Paramètre phone manquant.');
+
+  try {
+    const result = await pool.query(
+      `UPDATE users SET role = 'admin' WHERE phone = $1 RETURNING id, phone, full_name, role`,
+      [phone]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).send(`Aucun utilisateur trouvé avec le numéro ${phone}.`);
+    }
+    res.send(`✅ ${result.rows[0].full_name} (${phone}) est maintenant admin.`);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Erreur serveur.');
+  }
+}
