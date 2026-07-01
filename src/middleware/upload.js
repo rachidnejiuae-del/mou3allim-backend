@@ -13,14 +13,16 @@ const storage = multer.diskStorage({
   },
 });
 
-const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+const allowedPhotoTypes = ['image/jpeg', 'image/png', 'image/webp'];
+const allowedCertTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
 
 const upload = multer({
   storage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    if (!allowedTypes.includes(file.mimetype)) {
-      return cb(new Error('Format de fichier non supporté (jpeg, png, webp uniquement).'));
+    const allowed = req.route?.path?.includes('certificate') ? allowedCertTypes : allowedPhotoTypes;
+    if (!allowed.includes(file.mimetype)) {
+      return cb(new Error('Format non supporté.'));
     }
     cb(null, true);
   },
