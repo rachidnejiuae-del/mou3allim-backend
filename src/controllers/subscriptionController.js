@@ -67,5 +67,30 @@ async function redeem(req, res) {
     client.release();
   }
 }
+// GET /api/subscriptions/me — teacher checks their own subscription status
+async function getMySubscription(req, res) {
+  try {
+    const profileResult = await pool.query(
+      'SELECT id FROM teacher_profiles WHERE user_id = $1',
+      [req.user.id]
+    );
+    if (profileResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Profil introuvable.' });
+    }
+    const teacherId = profileResult.rows[0].id;
+    const result = await pool.query(
+      `SELECT plan, starts_at, ends_at, payment_status
+       FROM subscriptions
+       WHERE teacher_id = $1 AND payment_status = 'paid'
+       ORDER BY ends_at DESC LIMIT 1`,
+      [teacherId]
+    );
+    res.json({ subscription: result.rows[0] || null });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur.' });
+  }
+}
 
+module.exports = { redeem, getMySubscription };
 module.exports = { redeem };
