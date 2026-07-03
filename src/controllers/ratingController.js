@@ -1,6 +1,5 @@
 const pool = require('../db/pool');
 
-// POST /api/teachers/:id/ratings
 async function rate(req, res) {
   const teacherId = req.params.id;
   const { score, comment, guest_name } = req.body;
@@ -10,11 +9,11 @@ async function rate(req, res) {
   }
 
   try {
+    if (req.user && req.user.role === 'teacher') {
+      return res.status(403).json({ error: 'Seuls les parents peuvent noter un professeur.' });
+    }
+
     if (req.user) {
-      // Logged-in user (parent account)
-      if (req.user.role === 'teacher') {
-        return res.status(403).json({ error: 'Seuls les parents peuvent noter un professeur.' });
-      }
       await pool.query(
         `INSERT INTO ratings (teacher_id, parent_id, score, comment, guest_name)
          VALUES ($1, $2, $3, $4, NULL)
@@ -23,7 +22,6 @@ async function rate(req, res) {
         [teacherId, req.user.id, score, comment || null]
       );
     } else {
-      // Anonymous guest — use guest_name
       if (!guest_name || !guest_name.trim()) {
         return res.status(400).json({ error: 'Le prénom est requis pour noter.' });
       }
@@ -40,15 +38,14 @@ async function rate(req, res) {
   }
 }
 
-// GET /api/teachers/:id/ratings
 async function list(req, res) {
   try {
     const result = await pool.query(
-      `SELECT r.score, r.comment, r.created_at,
+      `SELECT r.id, r.score, r.comment, r.created_at, r.hidden,
         COALESCE(r.guest_name, u.full_name, 'Anonyme') AS parent_name
        FROM ratings r
        LEFT JOIN users u ON u.id = r.parent_id
-       WHERE r.teacher_id = $1
+       WHERE r.teacher_id = $1 AND r.hidden = FALSE
        ORDER BY r.created_at DESC
        LIMIT 100`,
       [req.params.id]
@@ -60,4 +57,30 @@ async function list(req, res) {
   }
 }
 
-module.exports = { rate, list };
+async function hide(req, res) {
+  try {
+    await pool.query(
+      `UPDATE ratings SET hidden = TRUE WHERE id = $1`,
+      [req.params.ratingId]
+    );
+    res.json({ message: 'Commentaire masqué.' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur.' });
+  }
+}
+
+async function unhide(req, res) {
+  try {
+    await pool.query(
+      `UPDATE ratings SET hidden = FALSE WHERE id = $1`,
+      [req.params.ratingId]
+    );
+    res.json({ message: 'Commentaire restauré.' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur.' });
+  }
+}
+
+module.exports = { rate, list, hide, unhide };
