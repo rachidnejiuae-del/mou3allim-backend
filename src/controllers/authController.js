@@ -10,10 +10,8 @@ function signToken(user) {
   );
 }
 
-// POST /api/auth/register
-// role: 'parent' or 'teacher'. Teachers fill the rest of their profile in a separate step.
 async function register(req, res) {
-  const { phone, password, full_name, role } = req.body;
+  const { phone, password, full_name, role, gender } = req.body;
 
   if (!phone || !password || !full_name || !role) {
     return res.status(400).json({ error: 'phone, password, full_name et role sont requis.' });
@@ -21,6 +19,11 @@ async function register(req, res) {
   if (!['parent', 'teacher'].includes(role)) {
     return res.status(400).json({ error: 'role doit être "parent" ou "teacher".' });
   }
+
+  const validGender = gender === 'female' ? 'female' : 'male';
+  const avatarUrl = validGender === 'female'
+    ? 'https://api.dicebear.com/7.x/avataaars/svg?seed=female-teacher&style=circle'
+    : 'https://api.dicebear.com/7.x/avataaars/svg?seed=male-teacher&style=circle';
 
   try {
     const existing = await pool.query('SELECT id FROM users WHERE phone = $1', [phone]);
@@ -30,18 +33,17 @@ async function register(req, res) {
 
     const passwordHash = await bcrypt.hash(password, 10);
     const result = await pool.query(
-      `INSERT INTO users (phone, password_hash, full_name, role)
-       VALUES ($1, $2, $3, $4) RETURNING id, phone, full_name, role`,
-      [phone, passwordHash, full_name, role]
+      `INSERT INTO users (phone, password_hash, full_name, role, gender)
+       VALUES ($1, $2, $3, $4, $5) RETURNING id, phone, full_name, role, gender`,
+      [phone, passwordHash, full_name, role, validGender]
     );
     const user = result.rows[0];
 
-    // If teacher, create an empty pending profile right away
     if (role === 'teacher') {
       await pool.query(
-        `INSERT INTO teacher_profiles (user_id, governorate, status)
-         VALUES ($1, $2, 'pending')`,
-        [user.id, 'Tunis']
+        `INSERT INTO teacher_profiles (user_id, governorate, status, photo_url)
+         VALUES ($1, $2, 'pending', $3)`,
+        [user.id, 'Tunis', avatarUrl]
       );
     }
 
@@ -49,25 +51,21 @@ async function register(req, res) {
     res.status(201).json({ token, user });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Erreur serveur lors de l\'inscription.' });
+    res.status(500).json({ error: "Erreur serveur lors de l'inscription." });
   }
 }
 
-// POST /api/auth/login
 async function login(req, res) {
   const { phone, password } = req.body;
   if (!phone || !password) {
     return res.status(400).json({ error: 'phone et password sont requis.' });
   }
-
   try {
     const result = await pool.query('SELECT * FROM users WHERE phone = $1', [phone]);
     const user = result.rows[0];
     if (!user) return res.status(401).json({ error: 'Identifiants invalides.' });
-
     const valid = await bcrypt.compare(password, user.password_hash);
     if (!valid) return res.status(401).json({ error: 'Identifiants invalides.' });
-
     const token = signToken(user);
     res.json({
       token,
@@ -79,16 +77,12 @@ async function login(req, res) {
   }
 }
 
-
-
-// GET /api/auth/bootstrap-admin?phone=...&key=...
 async function bootstrapAdmin(req, res) {
   const { phone, key } = req.query;
   if (!process.env.ADMIN_SETUP_KEY || key !== process.env.ADMIN_SETUP_KEY) {
     return res.status(403).send('Clé invalide.');
   }
   if (!phone) return res.status(400).send('Paramètre phone manquant.');
-
   try {
     const result = await pool.query(
       `UPDATE users SET role = 'admin' WHERE phone = $1 RETURNING id, phone, full_name, role`,
@@ -103,4 +97,39 @@ async function bootstrapAdmin(req, res) {
     res.status(500).send('Erreur serveur.');
   }
 }
-module.exports = { register, login, bootstrapAdmin };
+
+async function resetPassword(req, res) {
+  const { phone, code, new_password } = req.body;
+  if (!phone || !code || !new_password) {
+    return res.status(400).json({ error: 'Téléphone, code et nouveau mot de passe requis.' });
+  }
+  if (new_password.length < 6) {
+    return res.status(400).json({ error: 'Le mot de passe doit contenir au moins 6 caractères.' });
+  }
+  try {
+    const otpResult = await pool.query(
+      `SELECT * FROM otp_codes
+       WHERE phone = $1 AND code = $2 AND used = FALSE AND expires_at > NOW()
+       ORDER BY created_at DESC LIMIT 1`,
+      [phone, code]
+    );
+    if (otpResult.rows.length === 0) {
+      return res.status(400).json({ error: 'Code invalide ou expiré.' });
+    }
+    await pool.query(`UPDATE otp_codes SET used = TRUE WHERE id = $1`, [otpResult.rows[0].id]);
+    const passwordHash = await bcrypt.hash(new_password, 10);
+    const userResult = await pool.query(
+      `UPDATE users SET password_hash = $1 WHERE phone = $2 RETURNING id`,
+      [passwordHash, phone]
+    );
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Aucun compte trouvé avec ce numéro.' });
+    }
+    res.json({ message: 'Mot de passe réinitialisé avec succès.' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur.' });
+  }
+}
+
+module.exports = { register, login, bootstrapAdmin, resetPassword };
