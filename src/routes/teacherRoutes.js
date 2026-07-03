@@ -19,6 +19,5 @@ router.post('/me/photo', authenticate, requireRole('teacher'), upload.single('ph
 router.post('/me/certificate', authenticate, requireRole('teacher'), upload.single('certificate'), uploadCertificate);
 
 // Authenticated (parent)
-router.post('/:id/ratings', authenticate, requireRole('parent'), rate);
-
+router.post('/:id/ratings', rate);
 module.exports = router;
