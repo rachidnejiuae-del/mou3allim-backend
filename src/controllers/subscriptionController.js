@@ -93,4 +93,3 @@ async function getMySubscription(req, res) {
 }
 
 module.exports = { redeem, getMySubscription };
-module.exports = { redeem };
