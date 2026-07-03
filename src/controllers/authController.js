@@ -22,8 +22,8 @@ async function register(req, res) {
 
   const validGender = gender === 'female' ? 'female' : 'male';
   const avatarUrl = validGender === 'female'
-    ? 'https://api.dicebear.com/7.x/avataaars/svg?seed=female-teacher&style=circle'
-    : 'https://api.dicebear.com/7.x/avataaars/svg?seed=male-teacher&style=circle';
+    ? 'https://i.ibb.co/Kzw9Y1BF/female-teacher.jpg'
+    : 'https://i.ibb.co/8DZjzRhB/male-teacher.jpg';
 
   try {
     const existing = await pool.query('SELECT id FROM users WHERE phone = $1', [phone]);
