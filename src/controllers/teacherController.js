@@ -56,7 +56,6 @@ async function updateMyProfile(req, res) {
 async function uploadPhoto(req, res) {
   if (!req.file) return res.status(400).json({ error: 'Aucun fichier reçu.' });
   const photoUrl = `/uploads/${req.file.filename}`;
-
   try {
     await pool.query(
       `UPDATE teacher_profiles SET photo_url = $1, updated_at = NOW() WHERE user_id = $2`,
@@ -72,7 +71,6 @@ async function uploadPhoto(req, res) {
 async function uploadCertificate(req, res) {
   if (!req.file) return res.status(400).json({ error: 'Aucun fichier reçu.' });
   const certificateUrl = `/uploads/${req.file.filename}`;
-
   try {
     await pool.query(
       `UPDATE teacher_profiles SET certificate_url = $1, updated_at = NOW() WHERE user_id = $2`,
@@ -121,7 +119,7 @@ async function search(req, res) {
     }
 
     const sql = `
-      SELECT DISTINCT tp.id, u.full_name, tp.photo_url, tp.governorate, tp.bio,
+      SELECT DISTINCT tp.id, u.full_name, u.gender, tp.photo_url, tp.governorate, tp.bio,
         COALESCE(AVG(r.score), 0)::float AS rating,
         COUNT(DISTINCT r.id) AS rating_count
       FROM teacher_profiles tp
@@ -129,7 +127,7 @@ async function search(req, res) {
       JOIN subscriptions s ON s.teacher_id = tp.id
       LEFT JOIN ratings r ON r.teacher_id = tp.id
       WHERE ${conditions.join(' AND ')} ${subjectFilter} ${areaFilter}
-      GROUP BY tp.id, u.full_name, tp.photo_url, tp.governorate, tp.bio
+      GROUP BY tp.id, u.full_name, u.gender, tp.photo_url, tp.governorate, tp.bio
       ORDER BY rating DESC
       LIMIT 50;
     `;
@@ -166,7 +164,7 @@ async function search(req, res) {
 async function getById(req, res) {
   try {
     const result = await pool.query(
-      `SELECT tp.id, u.full_name, u.phone, tp.photo_url, tp.governorate, tp.bio,
+      `SELECT tp.id, u.full_name, u.phone, u.gender, tp.photo_url, tp.governorate, tp.bio,
         tp.certificate_url,
         COALESCE(AVG(r.score), 0)::float AS rating,
         COUNT(DISTINCT r.id) AS rating_count
@@ -175,7 +173,7 @@ async function getById(req, res) {
        JOIN subscriptions s ON s.teacher_id = tp.id
        LEFT JOIN ratings r ON r.teacher_id = tp.id
        WHERE tp.id = $1 AND tp.status = 'approved' AND s.payment_status = 'paid' AND s.ends_at > NOW()
-       GROUP BY tp.id, u.full_name, u.phone, tp.photo_url, tp.governorate, tp.bio, tp.certificate_url`,
+       GROUP BY tp.id, u.full_name, u.phone, u.gender, tp.photo_url, tp.governorate, tp.bio, tp.certificate_url`,
       [req.params.id]
     );
     if (result.rows.length === 0) {
