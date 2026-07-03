@@ -1,7 +1,10 @@
 const pool = require('../db/pool');
 
+// PUT /api/teachers/me — teacher updates their own profile
 async function updateMyProfile(req, res) {
   const { bio, governorate, latitude, longitude, subjects, areas } = req.body;
+  // subjects: [{ subject_id, price_per_hour }]
+  // areas: ["Bardo", "El Manar", ...]
 
   try {
     const profileResult = await pool.query(
@@ -46,43 +49,33 @@ async function updateMyProfile(req, res) {
       }
     }
 
-    res.json({ message: 'Profil mis à jour.' });
+    res.json({ message: 'Profil mis à jour. En attente de validation si modifié.' });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erreur serveur lors de la mise à jour du profil.' });
   }
 }
 
+// POST /api/teachers/me/photo — upload profile photo
 async function uploadPhoto(req, res) {
   if (!req.file) return res.status(400).json({ error: 'Aucun fichier reçu.' });
   const photoUrl = `/uploads/${req.file.filename}`;
+
   try {
     await pool.query(
-      `UPDATE teacher_profiles SET photo_url = $1, updated_at = NOW() WHERE user_id = $2`,
+      `UPDATE teacher_profiles SET photo_url = $1, updated_at = NOW()
+       WHERE user_id = $2`,
       [photoUrl, req.user.id]
     );
     res.json({ photo_url: photoUrl });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Erreur serveur lors de l'upload." });
+    res.status(500).json({ error: 'Erreur serveur lors de l\'upload.' });
   }
 }
 
-async function uploadCertificate(req, res) {
-  if (!req.file) return res.status(400).json({ error: 'Aucun fichier reçu.' });
-  const certificateUrl = `/uploads/${req.file.filename}`;
-  try {
-    await pool.query(
-      `UPDATE teacher_profiles SET certificate_url = $1, updated_at = NOW() WHERE user_id = $2`,
-      [certificateUrl, req.user.id]
-    );
-    res.json({ certificate_url: certificateUrl });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Erreur serveur lors de l'upload du certificat." });
-  }
-}
-
+// GET /api/teachers/search?subject=Mathématiques&governorate=Tunis&area=Bardo&q=ahmed
+// Public endpoint — only returns approved teachers with an active subscription
 async function search(req, res) {
   const { subject, governorate, area, q } = req.query;
 
@@ -134,6 +127,7 @@ async function search(req, res) {
 
     const result = await pool.query(sql, params);
 
+    // Attach subjects+prices and areas for each teacher
     const teachers = await Promise.all(
       result.rows.map(async (t) => {
         const [subjResult, areaResult] = await Promise.all([
@@ -161,11 +155,12 @@ async function search(req, res) {
   }
 }
 
+// GET /api/teachers/:id — public profile detail (only if approved + subscribed)
 async function getById(req, res) {
   try {
     const result = await pool.query(
       `SELECT tp.id, u.full_name, u.phone, u.gender, tp.photo_url, tp.governorate, tp.bio,
-        tp.certificate_url,
+        tp.certificate_url, s.ends_at,
         COALESCE(AVG(r.score), 0)::float AS rating,
         COUNT(DISTINCT r.id) AS rating_count
        FROM teacher_profiles tp
@@ -173,7 +168,7 @@ async function getById(req, res) {
        JOIN subscriptions s ON s.teacher_id = tp.id
        LEFT JOIN ratings r ON r.teacher_id = tp.id
        WHERE tp.id = $1 AND tp.status = 'approved' AND s.payment_status = 'paid' AND s.ends_at > NOW()
-       GROUP BY tp.id, u.full_name, u.phone, u.gender, tp.photo_url, tp.governorate, tp.bio, tp.certificate_url`,
+       GROUP BY tp.id, u.full_name, u.phone, u.gender, tp.photo_url, tp.governorate, tp.bio, tp.certificate_url, s.ends_at`,
       [req.params.id]
     );
     if (result.rows.length === 0) {
@@ -201,6 +196,25 @@ async function getById(req, res) {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erreur serveur.' });
+  }
+}
+
+module.exports = { updateMyProfile, uploadPhoto, uploadCertificate, search, getById };
+// POST /api/teachers/me/certificate — upload teaching certificate (PDF or image)
+async function uploadCertificate(req, res) {
+  if (!req.file) return res.status(400).json({ error: 'Aucun fichier reçu.' });
+  const certificateUrl = `/uploads/${req.file.filename}`;
+
+  try {
+    await pool.query(
+      `UPDATE teacher_profiles SET certificate_url = $1, updated_at = NOW()
+       WHERE user_id = $2`,
+      [certificateUrl, req.user.id]
+    );
+    res.json({ certificate_url: certificateUrl });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur lors de l'upload du certificat." });
   }
 }
 
