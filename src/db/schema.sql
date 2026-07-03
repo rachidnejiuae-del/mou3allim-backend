@@ -95,7 +95,9 @@ CREATE INDEX IF NOT EXISTS idx_otp_codes_phone ON otp_codes(phone);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_verified BOOLEAN DEFAULT FALSE;
 
 ALTER TABLE teacher_profiles ADD COLUMN IF NOT EXISTS certificate_url VARCHAR(500);
-
+ALTER TABLE users ADD COLUMN IF NOT EXISTS gender VARCHAR(10) CHECK (gender IN ('male', 'female'));
+ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_verified BOOLEAN DEFAULT FALSE;
+ALTER TABLE teacher_profiles ADD COLUMN IF NOT EXISTS certificate_url VARCHAR(500);
 CREATE INDEX IF NOT EXISTS idx_teacher_profiles_status ON teacher_profiles(status);
 CREATE INDEX IF NOT EXISTS idx_teacher_areas_name ON teacher_areas(area_name);
 
