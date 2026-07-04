@@ -1,24 +1,14 @@
 const express = require('express');
-const { authenticate, requireRole } = require('../middleware/auth');
-const { listPending, listAll, approve, reject, suspend } = require('../controllers/adminController');
-const { generate, list: listCodes, disable } = require('../controllers/codeController');
-const { hide, unhide } = require('../controllers/ratingController');
+const { register, login, bootstrapAdmin, resetPassword } = require('../controllers/authController');
+const { sendOtp, verifyOtp } = require('../controllers/otpController');
 
 const router = express.Router();
 
-router.use(authenticate, requireRole('admin'));
-
-router.get('/teachers/pending', listPending);
-router.get('/teachers', listAll);
-router.patch('/teachers/:id/approve', approve);
-router.patch('/teachers/:id/reject', reject);
-router.patch('/teachers/:id/suspend', suspend);
-
-router.post('/codes/generate', generate);
-router.get('/codes', listCodes);
-router.patch('/codes/:id/disable', disable);
-
-router.patch('/ratings/:ratingId/hide', hide);
-router.patch('/ratings/:ratingId/unhide', unhide);
+router.post('/register', register);
+router.post('/login', login);
+router.get('/bootstrap-admin', bootstrapAdmin);
+router.post('/send-otp', sendOtp);
+router.post('/verify-otp', verifyOtp);
+router.post('/reset-password', resetPassword);
 
 module.exports = router;
