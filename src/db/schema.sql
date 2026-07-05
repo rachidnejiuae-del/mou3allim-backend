@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS subscriptions (
 -- Ratings from parents
 CREATE TABLE IF NOT EXISTS ratings (
   id SERIAL PRIMARY KEY,
-  teacher_id INTEGER NOT NULL REFERENCES teacher_profiles(id) ON DELETE CASCADE,
+  parent_id  INTEGER REFERENCES users(id) ON DELETE CASCADE,
   parent_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   score INTEGER NOT NULL CHECK (score BETWEEN 1 AND 5),
   comment TEXT,
