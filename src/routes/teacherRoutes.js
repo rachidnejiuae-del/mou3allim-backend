@@ -1,6 +1,6 @@
 const express = require('express');
 const { authenticate, requireRole } = require('../middleware/auth');
-const upload = require('../middleware/upload');
+const { upload } = require('../middleware/upload');
 const {
   updateMyProfile, uploadPhoto, uploadCertificate, search, getById,
 } = require('../controllers/teacherController');
