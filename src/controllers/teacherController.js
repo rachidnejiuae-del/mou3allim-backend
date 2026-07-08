@@ -1,10 +1,48 @@
 const pool = require('../db/pool');
+const { uploadToCloudinary } = require('../middleware/upload');
 
-// PUT /api/teachers/me — teacher updates their own profile
+// GET /api/teachers/me — teacher loads their own profile data
+async function getMyProfile(req, res) {
+  try {
+    const result = await pool.query(
+      `SELECT u.full_name, u.phone, u.gender,
+        tp.id, tp.bio, tp.governorate, tp.photo_url, tp.certificate_url, tp.status
+       FROM teacher_profiles tp
+       JOIN users u ON u.id = tp.user_id
+       WHERE tp.user_id = $1`,
+      [req.user.id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Profil introuvable.' });
+    }
+    const teacherId = result.rows[0].id;
+
+    const [subjResult, areaResult] = await Promise.all([
+      pool.query(
+        `SELECT ts.subject_id, sub.name, ts.price_per_hour
+         FROM teacher_subjects ts
+         JOIN subjects sub ON sub.id = ts.subject_id
+         WHERE ts.teacher_id = $1`,
+        [teacherId]
+      ),
+      pool.query(`SELECT area_name FROM teacher_areas WHERE teacher_id = $1`, [teacherId]),
+    ]);
+
+    res.json({
+      profile: {
+        ...result.rows[0],
+        subjects: subjResult.rows,
+        areas: areaResult.rows.map((r) => r.area_name),
+      },
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur.' });
+  }
+}
+
 async function updateMyProfile(req, res) {
   const { bio, governorate, latitude, longitude, subjects, areas } = req.body;
-  // subjects: [{ subject_id, price_per_hour }]
-  // areas: ["Bardo", "El Manar", ...]
 
   try {
     const profileResult = await pool.query(
@@ -49,33 +87,54 @@ async function updateMyProfile(req, res) {
       }
     }
 
-    res.json({ message: 'Profil mis à jour. En attente de validation si modifié.' });
+    res.json({ message: 'Profil mis à jour.' });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erreur serveur lors de la mise à jour du profil.' });
   }
 }
 
-// POST /api/teachers/me/photo — upload profile photo
 async function uploadPhoto(req, res) {
   if (!req.file) return res.status(400).json({ error: 'Aucun fichier reçu.' });
-  const photoUrl = `/uploads/${req.file.filename}`;
 
   try {
+    const photoUrl = await uploadToCloudinary(req.file.buffer, 'photos', 'image');
+
     await pool.query(
-      `UPDATE teacher_profiles SET photo_url = $1, updated_at = NOW()
-       WHERE user_id = $2`,
+      `UPDATE teacher_profiles SET photo_url = $1, updated_at = NOW() WHERE user_id = $2`,
       [photoUrl, req.user.id]
     );
     res.json({ photo_url: photoUrl });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Erreur serveur lors de l\'upload.' });
+    console.error('Cloudinary photo upload error:', err);
+    res.status(500).json({ error: "Erreur lors de l'upload de la photo." });
   }
 }
 
-// GET /api/teachers/search?subject=Mathématiques&governorate=Tunis&area=Bardo&q=ahmed
-// Public endpoint — only returns approved teachers with an active subscription
+async function uploadCertificate(req, res) {
+  if (!req.file) return res.status(400).json({ error: 'Aucun fichier reçu.' });
+
+  try {
+    const isPdf = req.file.mimetype === 'application/pdf';
+    const resourceType = isPdf ? 'raw' : 'image';
+
+    const certificateUrl = await uploadToCloudinary(
+      req.file.buffer,
+      'certificates',
+      resourceType
+    );
+
+    await pool.query(
+      `UPDATE teacher_profiles SET certificate_url = $1, updated_at = NOW() WHERE user_id = $2`,
+      [certificateUrl, req.user.id]
+    );
+    res.json({ certificate_url: certificateUrl });
+  } catch (err) {
+    console.error('Cloudinary certificate upload error:', err);
+    res.status(500).json({ error: "Erreur lors de l'upload du certificat." });
+  }
+}
+
 async function search(req, res) {
   const { subject, governorate, area, q } = req.query;
 
@@ -127,7 +186,6 @@ async function search(req, res) {
 
     const result = await pool.query(sql, params);
 
-    // Attach subjects+prices and areas for each teacher
     const teachers = await Promise.all(
       result.rows.map(async (t) => {
         const [subjResult, areaResult] = await Promise.all([
@@ -155,7 +213,6 @@ async function search(req, res) {
   }
 }
 
-// GET /api/teachers/:id — public profile detail (only if approved + subscribed)
 async function getById(req, res) {
   try {
     const result = await pool.query(
@@ -168,7 +225,8 @@ async function getById(req, res) {
        JOIN subscriptions s ON s.teacher_id = tp.id
        LEFT JOIN ratings r ON r.teacher_id = tp.id
        WHERE tp.id = $1 AND tp.status = 'approved' AND s.payment_status = 'paid' AND s.ends_at > NOW()
-       GROUP BY tp.id, u.full_name, u.phone, u.gender, tp.photo_url, tp.governorate, tp.bio, tp.certificate_url, s.ends_at`,
+       GROUP BY tp.id, u.full_name, u.phone, u.gender, tp.photo_url, tp.governorate, tp.bio,
+                tp.certificate_url, s.ends_at`,
       [req.params.id]
     );
     if (result.rows.length === 0) {
@@ -199,23 +257,4 @@ async function getById(req, res) {
   }
 }
 
-module.exports = { updateMyProfile, uploadPhoto, uploadCertificate, search, getById };
-// POST /api/teachers/me/certificate — upload teaching certificate (PDF or image)
-async function uploadCertificate(req, res) {
-  if (!req.file) return res.status(400).json({ error: 'Aucun fichier reçu.' });
-  const certificateUrl = `/uploads/${req.file.filename}`;
-
-  try {
-    await pool.query(
-      `UPDATE teacher_profiles SET certificate_url = $1, updated_at = NOW()
-       WHERE user_id = $2`,
-      [certificateUrl, req.user.id]
-    );
-    res.json({ certificate_url: certificateUrl });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Erreur serveur lors de l'upload du certificat." });
-  }
-}
-
-module.exports = { updateMyProfile, uploadPhoto, uploadCertificate, search, getById };
+module.exports = { getMyProfile, updateMyProfile, uploadPhoto, uploadCertificate, search, getById };
