@@ -1,6 +1,6 @@
 const express = require('express');
 const { authenticate, requireRole } = require('../middleware/auth');
-const { listPending, listAll, approve, reject, suspend } = require('../controllers/adminController');
+const { listPending, listAll, getStats, approve, reject, suspend } = require('../controllers/adminController');
 const { generate, list: listCodes, disable } = require('../controllers/codeController');
 const { hide, unhide } = require('../controllers/ratingController');
 const pool = require('../db/pool');
@@ -8,6 +8,8 @@ const pool = require('../db/pool');
 const router = express.Router();
 
 router.use(authenticate, requireRole('admin'));
+
+router.get('/stats', getStats);
 
 router.get('/teachers/pending', listPending);
 router.get('/teachers', listAll);
