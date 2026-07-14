@@ -12,14 +12,14 @@ const storage = multer.memoryStorage();
 const allowedImageMimes = [
   'image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/heic', 'image/heif',
 ];
-const allowedCertMimes = [...allowedImageMimes, 'application/pdf'];
+const allowedDocMimes = [...allowedImageMimes, 'application/pdf'];
 const allowedImageExts = ['.jpg', '.jpeg', '.png', '.webp', '.heic', '.heif'];
-const allowedCertExts = [...allowedImageExts, '.pdf'];
+const allowedDocExts = [...allowedImageExts, '.pdf'];
 
-function isAllowed(file, isCert) {
+function isAllowed(file, allowDocs) {
   const ext = path.extname(file.originalname || '').toLowerCase();
-  const mimeList = isCert ? allowedCertMimes : allowedImageMimes;
-  const extList = isCert ? allowedCertExts : allowedImageExts;
+  const mimeList = allowDocs ? allowedDocMimes : allowedImageMimes;
+  const extList = allowDocs ? allowedDocExts : allowedImageExts;
 
   // Accept if EITHER the MIME type OR the file extension matches —
   // this covers browsers that send generic/incorrect MIME types.
@@ -30,13 +30,15 @@ const upload = multer({
   storage,
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    const isCert = (req.path || req.url || '').includes('certificate');
-    console.log(`[upload] Incoming file: name="${file.originalname}" mimetype="${file.mimetype}" isCert=${isCert}`);
+    const routePath = req.path || req.url || '';
+    // Certificate and CV both accept PDF or image; plain "photo" only accepts images.
+    const allowDocs = routePath.includes('certificate') || routePath.includes('cv');
+    console.log(`[upload] Incoming file: name="${file.originalname}" mimetype="${file.mimetype}" allowDocs=${allowDocs} path="${routePath}"`);
 
-    if (!isAllowed(file, isCert)) {
+    if (!isAllowed(file, allowDocs)) {
       console.log(`[upload] REJECTED: ${file.originalname} (${file.mimetype})`);
       return cb(new Error(
-        isCert
+        allowDocs
           ? 'Format non supporté. Utilisez une image (JPG, PNG) ou un PDF.'
           : 'Format non supporté. Utilisez une image (JPG, PNG).'
       ));
