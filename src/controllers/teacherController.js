@@ -6,7 +6,7 @@ async function getMyProfile(req, res) {
   try {
     const result = await pool.query(
       `SELECT u.full_name, u.phone, u.gender,
-        tp.id, tp.bio, tp.governorate, tp.photo_url, tp.certificate_url, tp.status
+        tp.id, tp.bio, tp.governorate, tp.photo_url, tp.certificate_url, tp.cv_url, tp.status
        FROM teacher_profiles tp
        JOIN users u ON u.id = tp.user_id
        WHERE tp.user_id = $1`,
@@ -135,6 +135,27 @@ async function uploadCertificate(req, res) {
   }
 }
 
+// POST /api/teachers/me/cv — optional CV upload, visible to parents
+async function uploadCv(req, res) {
+  if (!req.file) return res.status(400).json({ error: 'Aucun fichier reçu.' });
+
+  try {
+    const isPdf = req.file.mimetype === 'application/pdf';
+    const resourceType = isPdf ? 'raw' : 'image';
+
+    const cvUrl = await uploadToCloudinary(req.file.buffer, 'cvs', resourceType);
+
+    await pool.query(
+      `UPDATE teacher_profiles SET cv_url = $1, updated_at = NOW() WHERE user_id = $2`,
+      [cvUrl, req.user.id]
+    );
+    res.json({ cv_url: cvUrl });
+  } catch (err) {
+    console.error('Cloudinary CV upload error:', err);
+    res.status(500).json({ error: "Erreur lors de l'upload du CV." });
+  }
+}
+
 async function search(req, res) {
   const { subject, governorate, area, q } = req.query;
 
@@ -217,7 +238,7 @@ async function getById(req, res) {
   try {
     const result = await pool.query(
       `SELECT tp.id, u.full_name, u.phone, u.gender, tp.photo_url, tp.governorate, tp.bio,
-        tp.certificate_url, s.ends_at,
+        tp.cv_url, s.ends_at,
         COALESCE(AVG(r.score), 0)::float AS rating,
         COUNT(DISTINCT r.id) AS rating_count
        FROM teacher_profiles tp
@@ -226,7 +247,7 @@ async function getById(req, res) {
        LEFT JOIN ratings r ON r.teacher_id = tp.id
        WHERE tp.id = $1 AND tp.status = 'approved' AND s.payment_status = 'paid' AND s.ends_at > NOW()
        GROUP BY tp.id, u.full_name, u.phone, u.gender, tp.photo_url, tp.governorate, tp.bio,
-                tp.certificate_url, s.ends_at`,
+                tp.cv_url, s.ends_at`,
       [req.params.id]
     );
     if (result.rows.length === 0) {
@@ -257,4 +278,6 @@ async function getById(req, res) {
   }
 }
 
-module.exports = { getMyProfile, updateMyProfile, uploadPhoto, uploadCertificate, search, getById };
+module.exports = {
+  getMyProfile, updateMyProfile, uploadPhoto, uploadCertificate, uploadCv, search, getById,
+};
