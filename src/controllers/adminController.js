@@ -1,5 +1,7 @@
 const pool = require('../db/pool');
 
+const ALLOWED_STATUSES = ['pending', 'approved', 'rejected', 'suspended'];
+
 async function listPending(req, res) {
   try {
     const result = await pool.query(
@@ -20,7 +22,17 @@ async function listPending(req, res) {
 async function listAll(req, res) {
   const { status } = req.query;
   try {
-    const conditions = status ? `WHERE tp.status = '${status}'` : '';
+    const params = [];
+    let conditions = '';
+
+    if (status) {
+      if (!ALLOWED_STATUSES.includes(status)) {
+        return res.status(400).json({ error: 'Statut invalide.' });
+      }
+      params.push(status);
+      conditions = `WHERE tp.status = $${params.length}`;
+    }
+
     const result = await pool.query(
       `SELECT tp.id, u.full_name, u.phone, u.gender, tp.governorate, tp.bio,
               tp.photo_url, tp.certificate_url, tp.status, tp.rejection_reason,
@@ -36,7 +48,8 @@ async function listAll(req, res) {
        GROUP BY tp.id, u.full_name, u.phone, u.gender, tp.governorate, tp.bio,
                 tp.photo_url, tp.certificate_url, tp.status, tp.rejection_reason,
                 tp.created_at, tp.updated_at, s.plan, s.ends_at, s.payment_status
-       ORDER BY tp.created_at DESC`
+       ORDER BY tp.created_at DESC`,
+      params
     );
     res.json({ teachers: result.rows });
   } catch (err) {
