@@ -1,6 +1,14 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const pool = require('../db/pool');
+const { normalizePhone, isPlausibleTunisianMobile } = require('../utils/phone');
+
+// Fail fast rather than signing tokens with `undefined` as the secret.
+if (!process.env.JWT_SECRET) {
+  throw new Error('JWT_SECRET is not set. Refusing to start.');
+}
+
+const OTP_ENABLED = process.env.OTP_ENABLED === 'true';
 
 function signToken(user) {
   return jwt.sign(
@@ -11,10 +19,20 @@ function signToken(user) {
 }
 
 async function register(req, res) {
-  const { phone, password, full_name, role, gender } = req.body;
+  const { password, full_name, role, gender } = req.body;
 
-  if (!phone || !password || !full_name || !role) {
+  const phone = normalizePhone(req.body.phone);
+  if (!phone) {
+    return res.status(400).json({ error: 'Numéro de téléphone invalide. Format attendu : +216 XX XXX XXX' });
+  }
+  if (!isPlausibleTunisianMobile(phone)) {
+    return res.status(400).json({ error: 'Veuillez saisir un numéro de mobile tunisien valide.' });
+  }
+  if (!password || !full_name || !role) {
     return res.status(400).json({ error: 'phone, password, full_name et role sont requis.' });
+  }
+  if (String(password).length < 6) {
+    return res.status(400).json({ error: 'Le mot de passe doit contenir au moins 6 caractères.' });
   }
   if (!['parent', 'teacher'].includes(role)) {
     return res.status(400).json({ error: 'role doit être "parent" ou "teacher".' });
@@ -48,24 +66,36 @@ async function register(req, res) {
     }
 
     const token = signToken(user);
-    res.status(201).json({ token, user });
+    res.status(201).json({ token, user, otp_required: OTP_ENABLED });
   } catch (err) {
+    if (err.code === '23505') {
+      return res.status(409).json({ error: 'Ce numéro de téléphone est déjà utilisé.' });
+    }
     console.error(err);
     res.status(500).json({ error: "Erreur serveur lors de l'inscription." });
   }
 }
 
 async function login(req, res) {
-  const { phone, password } = req.body;
+  const { password } = req.body;
+  const phone = normalizePhone(req.body.phone);
+
   if (!phone || !password) {
     return res.status(400).json({ error: 'phone et password sont requis.' });
   }
   try {
     const result = await pool.query('SELECT * FROM users WHERE phone = $1', [phone]);
     const user = result.rows[0];
-    if (!user) return res.status(401).json({ error: 'Identifiants invalides.' });
+
+    // Same generic message and a real bcrypt comparison either way, so response
+    // timing doesn't reveal whether the number is registered.
+    if (!user) {
+      await bcrypt.compare(password, '$2a$10$invalidinvalidinvalidinvalidinvalidinvalidinvalidinvalidin');
+      return res.status(401).json({ error: 'Identifiants invalides.' });
+    }
     const valid = await bcrypt.compare(password, user.password_hash);
     if (!valid) return res.status(401).json({ error: 'Identifiants invalides.' });
+
     const token = signToken(user);
     res.json({
       token,
@@ -77,59 +107,71 @@ async function login(req, res) {
   }
 }
 
-async function bootstrapAdmin(req, res) {
-  const { phone, key } = req.query;
-  if (!process.env.ADMIN_SETUP_KEY || key !== process.env.ADMIN_SETUP_KEY) {
-    return res.status(403).send('Clé invalide.');
-  }
-  if (!phone) return res.status(400).send('Paramètre phone manquant.');
-  try {
-    const result = await pool.query(
-      `UPDATE users SET role = 'admin' WHERE phone = $1 RETURNING id, phone, full_name, role`,
-      [phone]
-    );
-    if (result.rows.length === 0) {
-      return res.status(404).send(`Aucun utilisateur trouvé avec le numéro ${phone}.`);
-    }
-    res.send(`✅ ${result.rows[0].full_name} (${phone}) est maintenant admin.`);
-  } catch (err) {
-    console.error(err);
-    res.status(500).send('Erreur serveur.');
-  }
-}
-
+// Self-service password reset depends on delivering an OTP by SMS.
+// With no SMS provider configured the code only reaches the server log, so this
+// endpoint stays closed until OTP_ENABLED=true.
 async function resetPassword(req, res) {
-  const { phone, code, new_password } = req.body;
+  if (!OTP_ENABLED) {
+    return res.status(503).json({
+      error: 'La réinitialisation automatique est momentanément indisponible. Contactez-nous sur WhatsApp au +216 28 357 354.',
+    });
+  }
+
+  const { code, new_password } = req.body;
+  const phone = normalizePhone(req.body.phone);
+
   if (!phone || !code || !new_password) {
     return res.status(400).json({ error: 'Téléphone, code et nouveau mot de passe requis.' });
   }
   if (new_password.length < 6) {
     return res.status(400).json({ error: 'Le mot de passe doit contenir au moins 6 caractères.' });
   }
+
+  const client = await pool.connect();
   try {
-    const otpResult = await pool.query(
+    await client.query('BEGIN');
+
+    const otpResult = await client.query(
       `SELECT * FROM otp_codes
-       WHERE phone = $1 AND code = $2 AND used = FALSE AND expires_at > NOW()
-       ORDER BY created_at DESC LIMIT 1`,
-      [phone, code]
+       WHERE phone = $1 AND used = FALSE AND expires_at > NOW()
+       ORDER BY created_at DESC LIMIT 1
+       FOR UPDATE`,
+      [phone]
     );
-    if (otpResult.rows.length === 0) {
+    const otp = otpResult.rows[0];
+
+    if (!otp || otp.attempts >= 5) {
+      await client.query('COMMIT');
+      return res.status(400).json({ error: 'Code invalide ou expiré. Demandez un nouveau code.' });
+    }
+
+    if (otp.code !== code) {
+      await client.query(`UPDATE otp_codes SET attempts = attempts + 1 WHERE id = $1`, [otp.id]);
+      await client.query('COMMIT');
       return res.status(400).json({ error: 'Code invalide ou expiré.' });
     }
-    await pool.query(`UPDATE otp_codes SET used = TRUE WHERE id = $1`, [otpResult.rows[0].id]);
+
+    await client.query(`UPDATE otp_codes SET used = TRUE WHERE id = $1`, [otp.id]);
     const passwordHash = await bcrypt.hash(new_password, 10);
-    const userResult = await pool.query(
+    const userResult = await client.query(
       `UPDATE users SET password_hash = $1 WHERE phone = $2 RETURNING id`,
       [passwordHash, phone]
     );
+
+    await client.query('COMMIT');
+
     if (userResult.rows.length === 0) {
       return res.status(404).json({ error: 'Aucun compte trouvé avec ce numéro.' });
     }
     res.json({ message: 'Mot de passe réinitialisé avec succès.' });
   } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
     console.error(err);
     res.status(500).json({ error: 'Erreur serveur.' });
+  } finally {
+    client.release();
   }
 }
 
-module.exports = { register, login, bootstrapAdmin, resetPassword };
+module.exports = { register, login, resetPassword };
+</parameter>
