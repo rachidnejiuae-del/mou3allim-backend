@@ -174,4 +174,3 @@ async function resetPassword(req, res) {
 }
 
 module.exports = { register, login, resetPassword };
-</parameter>
