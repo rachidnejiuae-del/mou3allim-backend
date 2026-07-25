@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 const path = require('path');
 
 const authRoutes = require('./routes/authRoutes');
@@ -8,14 +9,44 @@ const teacherRoutes = require('./routes/teacherRoutes');
 const subscriptionRoutes = require('./routes/subscriptionRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const lookupRoutes = require('./routes/lookupRoutes');
+const { globalLimiter } = require('./middleware/rateLimit');
 
 const app = express();
 
-app.use(cors());
-app.use(express.json());
+// Render terminates TLS at its proxy. Without this, req.ip is the proxy's
+// address and every visitor shares one rate-limit bucket.
+// Use 1, not true — `true` trusts the whole X-Forwarded-For chain, letting a
+// client spoof a header and get a fresh bucket per request.
+app.set('trust proxy', 1);
+
+app.use(helmet());
+
+// Allowlist instead of wide-open CORS. Add your custom domain here when you
+// point one at Netlify, and keep localhost for local development.
+const ALLOWED_ORIGINS = [
+  'https://steady-puffpuff-806d91.netlify.app',
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'http://127.0.0.1:5500',
+];
+
+app.use(cors({
+  origin(origin, callback) {
+    // No origin: curl, Expo native, server-to-server. Not a browser, so the
+    // same-origin policy isn't what's protecting us here anyway.
+    if (!origin) return callback(null, true);
+    if (ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
+    return callback(new Error('Origine non autorisée par CORS.'));
+  },
+  credentials: false,
+}));
+
+app.use(express.json({ limit: '1mb' }));
 app.use('/uploads', express.static(path.join(__dirname, '..', process.env.UPLOAD_DIR || 'uploads')));
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
+
+app.use('/api', globalLimiter);
 
 app.use('/api/auth', authRoutes);
 app.use('/api/teachers', teacherRoutes);
@@ -26,8 +57,11 @@ app.use('/api', lookupRoutes);
 // Centralized error handler (e.g. multer file errors)
 app.use((err, req, res, next) => {
   console.error(err);
-  res.status(err.status || 500).json({ error: err.message || 'Erreur serveur.' });
+  // Don't leak internal messages to clients on 500s.
+  const status = err.status || 500;
+  const message = status >= 500 ? 'Erreur serveur.' : (err.message || 'Requête invalide.');
+  res.status(status).json({ error: message });
 });
 
 const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => console.log(`🚀 Mou3allim API running on http://localhost:${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Mou3allim API running on port ${PORT}`));
