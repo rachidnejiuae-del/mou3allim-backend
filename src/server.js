@@ -28,12 +28,12 @@ const ALLOWED_ORIGINS = [
   'http://localhost:3000',
   'http://localhost:5173',
   'http://127.0.0.1:5500',
+  'null', // admin.html opened as a local file (file://) sends Origin: null
 ];
 
 app.use(cors({
   origin(origin, callback) {
-    // No origin: curl, Expo native, server-to-server. Not a browser, so the
-    // same-origin policy isn't what's protecting us here anyway.
+    // No origin header: curl, Expo native, server-to-server.
     if (!origin) return callback(null, true);
     if (ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
     return callback(new Error('Origine non autorisée par CORS.'));
