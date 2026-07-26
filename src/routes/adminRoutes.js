@@ -1,5 +1,7 @@
 const express = require('express');
+const bcrypt = require('bcryptjs');
 const { authenticate, requireRole } = require('../middleware/auth');
+const { normalizePhone } = require('../utils/phone');
 const { listPending, listAll, getStats, approve, reject, suspend } = require('../controllers/adminController');
 const { generate, list: listCodes, disable } = require('../controllers/codeController');
 const { hide, unhide } = require('../controllers/ratingController');
@@ -23,6 +25,46 @@ router.patch('/codes/:id/disable', disable);
 
 router.patch('/ratings/:ratingId/hide', hide);
 router.patch('/ratings/:ratingId/unhide', unhide);
+
+// ---- Identity verification for manual (WhatsApp) password resets ----------
+// Step 1: admin enters the phone, gets the account's security QUESTION to ask.
+router.get('/verify-identity', async (req, res) => {
+  const phone = normalizePhone(req.query.phone);
+  if (!phone) return res.status(400).json({ error: 'Numéro invalide.' });
+  try {
+    const r = await pool.query(
+      `SELECT full_name, role, created_at, security_question,
+              (security_answer_hash IS NOT NULL) AS has_answer
+       FROM users WHERE phone = $1`,
+      [phone]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'Aucun compte avec ce numéro.' });
+    res.json(r.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur.' });
+  }
+});
+
+// Step 2: admin enters the answer the person gave; server says match or not.
+// The stored answer is hashed, so it is never exposed — not even to the admin.
+router.post('/verify-identity', async (req, res) => {
+  const phone = normalizePhone(req.body.phone);
+  const answer = req.body.answer;
+  if (!phone || !answer) return res.status(400).json({ error: 'Numéro et réponse requis.' });
+  try {
+    const r = await pool.query('SELECT security_answer_hash FROM users WHERE phone = $1', [phone]);
+    if (!r.rows.length) return res.status(404).json({ error: 'Aucun compte avec ce numéro.' });
+    const hash = r.rows[0].security_answer_hash;
+    if (!hash) return res.json({ match: false, no_answer: true });
+    const norm = String(answer).trim().toLowerCase().replace(/\s+/g, ' ');
+    const match = await bcrypt.compare(norm, hash);
+    res.json({ match });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur.' });
+  }
+});
 
 router.get('/ratings/:teacherId', async (req, res) => {
   try {
