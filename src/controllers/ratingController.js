@@ -37,7 +37,11 @@ async function list(req, res) {
     // Show only the parent's FIRST name publicly (privacy) — never the full name.
     const result = await pool.query(
       `SELECT r.id, r.score, r.comment, r.created_at, r.hidden,
-        COALESCE(split_part(u.full_name, ' ', 1), 'Anonyme') AS parent_name
+        COALESCE(
+          CASE WHEN u.gender = 'female' THEN 'Mme ' ELSE 'Mr ' END
+            || split_part(u.full_name, ' ', 1),
+          'Anonyme'
+        ) AS parent_name
        FROM ratings r
        LEFT JOIN users u ON u.id = r.parent_id
        WHERE r.teacher_id = $1 AND r.hidden = FALSE
