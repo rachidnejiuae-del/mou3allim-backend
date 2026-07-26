@@ -3,12 +3,17 @@ const jwt = require('jsonwebtoken');
 const pool = require('../db/pool');
 const { normalizePhone, isPlausibleTunisianMobile } = require('../utils/phone');
 
-// Fail fast rather than signing tokens with `undefined` as the secret.
 if (!process.env.JWT_SECRET) {
   throw new Error('JWT_SECRET is not set. Refusing to start.');
 }
 
 const OTP_ENABLED = process.env.OTP_ENABLED === 'true';
+
+// Normalize a security answer so "École Carthage", "ecole carthage " and
+// "ecole  carthage" all compare equal.
+function normalizeAnswer(a) {
+  return String(a || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
 
 function signToken(user) {
   return jwt.sign(
@@ -19,7 +24,7 @@ function signToken(user) {
 }
 
 async function register(req, res) {
-  const { password, full_name, role, gender } = req.body;
+  const { password, full_name, role, gender, security_question, security_answer } = req.body;
 
   const phone = normalizePhone(req.body.phone);
   if (!phone) {
@@ -31,8 +36,8 @@ async function register(req, res) {
   if (!password || !full_name || !role) {
     return res.status(400).json({ error: 'phone, password, full_name et role sont requis.' });
   }
-  if (String(password).length < 6) {
-    return res.status(400).json({ error: 'Le mot de passe doit contenir au moins 6 caractères.' });
+  if (String(password).length < 8) {
+    return res.status(400).json({ error: 'Le mot de passe doit contenir au moins 8 caractères.' });
   }
   if (!['parent', 'teacher'].includes(role)) {
     return res.status(400).json({ error: 'role doit être "parent" ou "teacher".' });
@@ -43,6 +48,16 @@ async function register(req, res) {
     ? 'https://i.ibb.co/Kzw9Y1BF/female-teacher.jpg'
     : 'https://i.ibb.co/8DZjzRhB/male-teacher.jpg';
 
+  // Security question is optional at the API level (backward-compatible), but
+  // the website form requires it. Hash the answer like a password so a database
+  // leak never exposes it.
+  let securityQuestion = null;
+  let securityAnswerHash = null;
+  if (security_question && security_answer && normalizeAnswer(security_answer).length >= 2) {
+    securityQuestion = String(security_question).slice(0, 200);
+    securityAnswerHash = await bcrypt.hash(normalizeAnswer(security_answer), 10);
+  }
+
   try {
     const existing = await pool.query('SELECT id FROM users WHERE phone = $1', [phone]);
     if (existing.rows.length > 0) {
@@ -51,9 +66,10 @@ async function register(req, res) {
 
     const passwordHash = await bcrypt.hash(password, 10);
     const result = await pool.query(
-      `INSERT INTO users (phone, password_hash, full_name, role, gender)
-       VALUES ($1, $2, $3, $4, $5) RETURNING id, phone, full_name, role, gender`,
-      [phone, passwordHash, full_name, role, validGender]
+      `INSERT INTO users (phone, password_hash, full_name, role, gender, security_question, security_answer_hash)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING id, phone, full_name, role, gender`,
+      [phone, passwordHash, full_name, role, validGender, securityQuestion, securityAnswerHash]
     );
     const user = result.rows[0];
 
@@ -87,8 +103,6 @@ async function login(req, res) {
     const result = await pool.query('SELECT * FROM users WHERE phone = $1', [phone]);
     const user = result.rows[0];
 
-    // Same generic message and a real bcrypt comparison either way, so response
-    // timing doesn't reveal whether the number is registered.
     if (!user) {
       await bcrypt.compare(password, '$2a$10$invalidinvalidinvalidinvalidinvalidinvalidinvalidinvalidin');
       return res.status(401).json({ error: 'Identifiants invalides.' });
@@ -107,9 +121,6 @@ async function login(req, res) {
   }
 }
 
-// Self-service password reset depends on delivering an OTP by SMS.
-// With no SMS provider configured the code only reaches the server log, so this
-// endpoint stays closed until OTP_ENABLED=true.
 async function resetPassword(req, res) {
   if (!OTP_ENABLED) {
     return res.status(503).json({
@@ -123,8 +134,8 @@ async function resetPassword(req, res) {
   if (!phone || !code || !new_password) {
     return res.status(400).json({ error: 'Téléphone, code et nouveau mot de passe requis.' });
   }
-  if (new_password.length < 6) {
-    return res.status(400).json({ error: 'Le mot de passe doit contenir au moins 6 caractères.' });
+  if (new_password.length < 8) {
+    return res.status(400).json({ error: 'Le mot de passe doit contenir au moins 8 caractères.' });
   }
 
   const client = await pool.connect();
