@@ -22,6 +22,8 @@ router.post('/me/cv', authenticate, requireRole('teacher'), upload.single('cv'),
 router.get('/search', search);
 router.get('/:id', getById);
 router.get('/:id/ratings', listRatings);
-router.post('/:id/ratings', rate);
+
+// Rating now REQUIRES a logged-in account (registration required to rate).
+router.post('/:id/ratings', authenticate, rate);
 
 module.exports = router;
