@@ -66,6 +66,24 @@ router.post('/verify-identity', async (req, res) => {
   }
 });
 
+// Admin sets a new password AFTER verifying identity (manual WhatsApp reset).
+// This is the closing step of the Vérifier identité workflow.
+router.post('/reset-password', async (req, res) => {
+  const phone = normalizePhone(req.body.phone);
+  const newPassword = req.body.new_password;
+  if (!phone || !newPassword) return res.status(400).json({ error: 'Numéro et nouveau mot de passe requis.' });
+  if (String(newPassword).length < 8) return res.status(400).json({ error: 'Le mot de passe doit contenir au moins 8 caractères.' });
+  try {
+    const hash = await bcrypt.hash(newPassword, 10);
+    const r = await pool.query('UPDATE users SET password_hash = $1 WHERE phone = $2 RETURNING id', [hash, phone]);
+    if (!r.rows.length) return res.status(404).json({ error: 'Aucun compte avec ce numéro.' });
+    res.json({ message: 'Mot de passe réinitialisé.' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur.' });
+  }
+});
+
 router.get('/ratings/:teacherId', async (req, res) => {
   try {
     const result = await pool.query(
