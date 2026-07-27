@@ -104,41 +104,101 @@ Newest entries at the top.
 
 ---
 
-## 2026 — Account security additions (pre-launch, part 2)
+## 2026 — Pre-launch round 3 (contact options, consent, safety, admin reset)
 
 ### What changed
-- **Password minimum raised 6 → 8 characters** (authController.js + auth.html).
-- **Security question at signup.** New DB columns `users.security_question` and
-  `users.security_answer_hash`. The answer is HASHED (bcrypt, normalized to
-  lowercase/trimmed) — never stored or displayed in plaintext, not even to admin.
-- **Admin "Vérifier identité" tab** (admin.html, local file). Two admin-only
-  endpoints in adminRoutes.js:
-  - GET  /api/admin/verify-identity?phone=  → returns the account's QUESTION
-    (plus name/role/signup date) so admin knows what to ask. Never returns the answer.
-  - POST /api/admin/verify-identity {phone, answer} → returns {match:true/false}.
-    Server hashes the submitted answer and compares; admin sees only ✓ / ✗.
-- Existing pre-change accounts have blank security questions; the admin panel
-  detects this and tells the admin to verify another way.
+**Website**
+- **WhatsApp contact** on teacher profiles (teacher.html), next to the Call
+  button. Link: https://wa.me/<digits> built from the teacher's normalized phone.
+- **Teacher consent checkbox** at registration (auth.html) — required. Text:
+  number will be visible to parents + accept terms. Parents don't see it.
+- **Parent Mr/Mme title** instead of male/female (auth.html). Stored in the
+  existing gender column (Mr=male, Mme=female). Teachers keep 👨/👩 (avatar).
+- **Reviews show "Mr/Mme + first name"** (ratingController.js list query).
+  Never full name, never phone.
+- **Safety disclaimer** for parents on search.html (banner) and teacher.html
+  (box near contact): Mou3allim does not verify teacher identity; parents are
+  responsible for checking identity/references before lessons.
+- **Certificate upload removed** from dashboard (CV kept, visible to parents).
+- **Dashboard photo** now shows the same avatar parents see (was a 👤 emoji).
+- **Security question is teacher-only** (parents don't set one).
+- Parents can now **comment** when rating (comment box + send button); the
+  guest-rating path was already removed (registration required to rate).
 
-### IMPORTANT — how to verify identity for a WhatsApp password reset
-Security questions alone are WEAK (an acquaintance may know "school name" /
-"mother's name"). Do NOT reset on the question alone. Stack signals, strongest first:
-  1. **Number control** — is the person messaging from the WhatsApp number ON the
-     account? Best signal. Different number = red flag, require much more.
-  2. **Payment trail** — for teachers who bought a code: which number/method/date/
-     amount did they pay from? Hard for an impostor to fake.
-  3. **Security question** — supporting signal only, via the admin Vérifier tab.
-Rule of thumb: reset only if (number control) AND (payment OR question) check out.
+**Backend**
+- adminRoutes.js: new POST /api/admin/reset-password {phone, new_password}
+  (admin-only). Sets a new bcrypt hash. Used to close the manual-reset loop.
+- ratingController.js: registration required to rate; first-name + title only.
 
-### Deliberate design notes
-- Answer is irreversible: if a teacher forgets their own answer, it CANNOT be
-  recovered — fall back to number-control + payment checks.
-- Because the admin can't read answers either, dashboard access can't leak them.
+### Parent phone privacy — VERIFIED
+No public endpoint returns a parent's phone. Reviews expose only title+first
+name. Teacher phones ARE public by design (parents call/WhatsApp them).
 
-### Deferred (do after launch, low risk)
-- **Option A: custom security questions.** Let teachers write their OWN question
-  instead of picking from the fixed list — makes answers much harder to guess.
-  Small edit to auth.html. Not a launch blocker.
-- **Option C (stronger, later): manual OTP resets.** WhatsApp a 6-digit code to
-  the REGISTERED number and have them read it back — proves control, not just
-  knowledge. Gold standard once volume grows.
+### PROCEDURE — how to reset a teacher's password (no SMS)
+1. Teacher contacts you on WhatsApp saying they forgot their password.
+2. Verify identity FIRST (strongest signals): are they messaging from the
+   number ON the account? + payment detail (Flouci/CCP date/amount) + the
+   security question via admin "Vérifier identité" tab.
+3. In the Vérifier identité tab: enter their phone → Charger la question →
+   ask it → type their answer → Vérifier. Green ✓ = verified.
+4. A "Réinitialiser le mot de passe" box appears. Enter a temporary password
+   (8+ chars) → Réinitialiser.
+5. Send that temporary password to the teacher via WhatsApp. They log in with it.
+Do NOT reset on the security question alone — require number control + one more
+signal. For accounts with no security question, verify via number + payment.
+
+### BACKUP REMINDERS
+- All code lives in GitHub (mou3allim-backend, mou3allim-website) — recoverable.
+- admin.html is a LOCAL file, NOT in any repo. Keep a backup copy (email/Drive/
+  private repo). Losing it loses the whole admin dashboard.
+- Neon: keep an occasional branch/snapshot before big DB changes.
+
+### Still deferred (after launch)
+- Proper Terms of Service + Privacy Policy (real legal text — the in-page
+  disclaimer is NOT a substitute, especially re: minors + personal data).
+- SMS/WhatsApp OTP for phone verification + self-service reset.
+- Neon backup cadence, Render paid tier, teacher photo upload (optional).
+
+---
+
+## 2026 — Pre-launch round 4 (terms, contact, Arabic hidden, ops notes)
+
+### What changed / decisions
+- **Terms + Privacy page** `conditions.html` (French, general draft). Linked from:
+  the teacher-registration consent checkbox AND the homepage footer.
+  Covers: platform = connector (not employer), no identity verification (parent
+  responsible), teacher phone public / parent phone private, prepaid codes,
+  acceptable use, liability limit, data collected + usage. NOT legally reviewed.
+- **Contact Us section** on homepage (index.html): WhatsApp (+216 28 357 354)
+  live; EMAIL IS A PLACEHOLDER — replace `contact@mou3allim.tn` with the real
+  address when ready.
+- **Arabic hidden** (src/nav.js): FR/عربي switcher removed, French forced.
+  Translation machinery (i18n.js) left intact. To re-enable: restore the
+  lang-switch block + its two listeners in nav.js, translate strings in
+  i18n.js, handle RTL layout. (Arabic was poor quality — deferred, do properly.)
+- **Decision: one account per phone number** (kept strict). A teacher cannot
+  also hold a parent account on the same number. Prevents review-gaming and
+  self-rating. Revisit only if real users need dual roles.
+
+### Netlify credits (IMPORTANT ops note)
+- Free plan = 300 credits/month, HARD CAP, can never incur charges (site just
+  pauses until next month if 100% hit). Warns at 50/75/90/100%.
+- Deploys cost ~15 credits EACH — the main drain. Heavy editing days (many
+  commits) burn credits fast. Hit 75% during round 3+4 editing.
+- FIX: batch changes / commit less once stable. Deploy rate → ~0 after editing
+  phase, so 300/mo is plenty for a small friends test.
+- If paused mid-test: wait for month reset, or upgrade Personal ($9/mo, 1000 cr).
+
+### Netlify URL / custom domain (TODO when going public)
+- Renaming the netlify subdomain (e.g. mou3allim.netlify.app) is FREE and gives
+  a nicer share link — BUT the site URL is in the backend CORS allowlist
+  (server.js ALLOWED_ORIGINS). Renaming breaks the site until the backend
+  allowlist is updated to the new URL. Coordinate both together.
+- Custom domain (.com/.tn) ≈ $10–15/year, free HTTPS on Netlify. Same allowlist
+  caveat: add the new domain to ALLOWED_ORIGINS in server.js.
+
+### Still deferred (before real public launch)
+- Proper legal review of Terms/Privacy (minors + personal data).
+- Arabic translation done properly (native speaker + RTL).
+- SMS/WhatsApp OTP, Neon backup cadence, Render paid tier ($7/mo always-on).
+- Real contact email (replace placeholder).
