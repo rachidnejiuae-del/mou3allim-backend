@@ -202,3 +202,19 @@ signal. For accounts with no security question, verify via number + payment.
 - Arabic translation done properly (native speaker + RTL).
 - SMS/WhatsApp OTP, Neon backup cadence, Render paid tier ($7/mo always-on).
 - Real contact email (replace placeholder).
+- 
+---
+
+## 2026 — Delegations list updated (data)
+
+- Replaced `src/data/areas.js` with the FULL official delegation list per
+  governorate. Source: Code géographique tunisien (2012), pages 17–29.
+- 24 governorates, 264 delegations. Keys unchanged (still match the
+  GOVERNORATES list in routes/lookupRoutes.js), format unchanged
+  (module.exports = { 'Gouvernorat': [ 'délégation', ... ] }).
+- Trade-off accepted: switched from the old CURATED list (familiar
+  neighborhoods like El Manar, Sidi Bou Said, La Soukra) to the complete
+  OFFICIAL administrative list. If parents complain a familiar area is
+  missing, revisit and merge common names back in.
+- Note: 2012 source — a few newer delegations may not be included.
+- Backend-only change (Render), no Netlify credit cost. /health = ok after deploy.
