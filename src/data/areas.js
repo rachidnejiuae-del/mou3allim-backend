@@ -1,57 +1,111 @@
-// Areas (délégations/quartiers) per governorate, for finer-grained location search.
-// Not exhaustive administrative divisions — curated to the commonly known
-// neighborhoods/towns parents would actually search by.
+// Areas (délégations) per governorate — full official list.
+// Source: Code géographique tunisien (2012), délégations par gouvernorat.
+// Keys match the GOVERNORATES list in routes/lookupRoutes.js exactly.
 module.exports = {
   'Tunis': [
-    'Bardo', 'El Manar', 'El Menzah', 'Le Kram', 'La Marsa', 'Carthage',
-    'Sidi Bou Said', 'Bab Bhar', 'Bab Souika', 'El Omrane', 'El Ouardia',
-    'Cité El Khadra', 'Ezzouhour', 'El Kabaria', 'Sidi Hassine', 'Hraïria',
+    'Carthage', 'La Medina', 'Bab El Bhar', 'Bab Souika', 'El Omrane',
+    'El Omrane Supérieur', 'Ettahrir', 'El Menzah', 'Cité El Khadhra', 'Le Bardo',
+    'Sijoumi', 'Ezzouhour', 'El Hrairia', 'Sidi Hassine', 'El Ouardia',
+    'El Kabaria', 'Sidi El Béchir', 'Djebel Djelloud', 'La Goulette', 'Le Kram',
+    'La Marsa',
   ],
   'Ariana': [
-    'Ariana Ville', 'Ettadhamen', 'Mnihla', 'Raoued', 'Sidi Thabet',
-    'La Soukra', 'Kalâat el-Andalous',
+    'Ariana Ville', 'Soukra', 'Raoued', 'Kalaât El Andalous', 'Sidi Thabet',
+    'Cité Ettadhamen', 'El Mnihla',
   ],
   'Ben Arous': [
-    'Ben Arous Ville', 'Hammam Lif', 'Hammam Chott', 'Rades', 'Mégrine',
-    'Mornag', 'Mohamedia', "El Mourouj", 'Ezzahra', 'Boumhel',
+    'Ben Arous', 'La Nouvelle Medina', 'El Mourouj', 'Hammam Lif', 'Hammam Chôtt',
+    'Bou Mhel El Bassatine', 'Ezzahra', 'Radès', 'Megrine', 'Mohamedia',
+    'Fouchana', 'Mornag',
   ],
   'Manouba': [
-    'Manouba Ville', 'Den Den', 'Oued Ellil', 'Douar Hicher', 'Tebourba',
-    'El Battan', 'Borj El Amri', 'Jedaida',
+    'Mannouba', 'Douar Hicher', 'Oued Ellil', 'Mornaguia', 'Borj Amri',
+    'Djedeida', 'Tebourba', 'El Battane',
   ],
   'Nabeul': [
-    'Nabeul Ville', 'Hammamet', 'Dar Chaabane', 'Korba', 'Kelibia',
-    'Menzel Temime', 'Beni Khalled', 'Soliman', 'Grombalia', 'Takelsa',
+    'Nabeul', 'Dar Châabane El Fehri', 'Beni Khiar', 'Korba', 'Menzel Temime',
+    'El Mida', 'Kelibia', 'Hammam El Guezaz', 'El Haouaria', 'Takelsa',
+    'Soliman', 'Menzel Bouzelfa', 'Beni Khalled', 'Grombalia', 'Bou Argoub',
+    'Hammamet',
   ],
-  'Zaghouan': ['Zaghouan Ville', 'Zriba', 'El Fahs', 'Nadhour', 'Bir Mcherga'],
+  'Zaghouan': [
+    'Zaghouan', 'Ez-Zeriba', 'Bir Mchergua', 'El Fahs', 'En-Nadhour', 'Saouaf',
+  ],
   'Bizerte': [
-    'Bizerte Ville', 'Menzel Bourguiba', 'Menzel Jemil', 'Mateur',
-    'Ras Jebel', 'Sejnane', 'Ghar El Melh', 'Utique',
+    'Bizerte Nord', 'Zarzouna', 'Bizerte Sud', 'Sedjnane', 'Djoumine', 'Mateur',
+    'Ghezala', 'Menzel Bourguiba', 'Tinja', 'Utique', 'Ghar El Meleh',
+    'Menzel Djemil', 'El Alia', 'Ras Djebel',
   ],
-  'Béja': ['Béja Ville', 'Medjez el-Bab', 'Téboursouk', 'Nefza', 'Testour'],
-  'Jendouba': ['Jendouba Ville', 'Tabarka', 'Aïn Draham', 'Fernana', 'Bou Salem'],
-  'Le Kef': ['Le Kef Ville', 'Tajerouine', 'Dahmani', 'Nebeur', 'Sakiet Sidi Youssef'],
-  'Siliana': ['Siliana Ville', 'Bouarada', 'Gaâfour', 'Makthar', 'El Krib'],
+  'Béja': [
+    'Béja Nord', 'Béja Sud', 'Amdoun', 'Nefza', 'Teboursouk', 'Tibar',
+    'Testour', 'Goubellat', 'Medjez El Bab',
+  ],
+  'Jendouba': [
+    'Jendouba', 'Jendouba Nord', 'Bou Salem', 'Tabarka', 'Ain Draham',
+    'Fernana', 'Ghardimaou', 'Oued Meliz', 'Balta - Bou Aouane',
+  ],
+  'Le Kef': [
+    'Kef Ouest', 'Kef Est', 'Nebeur', 'Sakiet Sidi Youssef', 'Tajerouine',
+    'Kalâat Snan', 'Kalâat Khasbah', 'Djerissa', 'El Ksour', 'Dahmani', 'Es-Sers',
+  ],
+  'Siliana': [
+    'Siliana Nord', 'Siliana Sud', 'Bou Arada', 'Gaâfour', 'El Krib', 'Bourouis',
+    'Makthar', 'Er-Rouhia', 'Kesra', 'Bargou', 'El Aroussa',
+  ],
   'Sousse': [
-    'Sousse Ville', 'Hammam Sousse', 'Akouda', 'Kalâa Kebira', 'Kalâa Seghira',
-    'Msaken', 'Kantaoui', 'Sidi Bou Ali', 'Enfidha', 'Hergla',
+    'Sousse Medina', 'Sousse Riadh', 'Sousse Jawhara', 'Sousse Sidi Abdelhamid',
+    'Hammam Sousse', 'Akouda', 'Kalaâ Kebira', 'Sidi Bou Ali', 'Hergla',
+    'Enfidha', 'Bouficha', 'Kondar', 'Sidi El Héni', "M'saken",
+    'Kalaâ Seghira', 'Zaouia - Ksiba - Thrayet',
   ],
   'Monastir': [
-    'Monastir Ville', 'Skanes', 'Ksar Hellal', 'Moknine', 'Jemmal',
-    'Sahline', 'Bekalta', 'Téboulba',
+    'Monastir', 'Ouerdanine', 'Sahline', 'Zermadine', 'Beni Hassen', 'Jammel',
+    'Bembla', 'Moknine', 'Bekalta', 'Teboulba', 'Ksar Helal',
+    'Ksibet El Mediouni', 'Sayada-Lamta Bou-Hjar',
   ],
-  'Mahdia': ['Mahdia Ville', 'Ksour Essef', 'Bou Merdes', 'El Jem', 'Chebba', 'Sidi Alouane'],
+  'Mahdia': [
+    'Mahdia', 'Bou Merdès', 'Ouled Chamekh', 'Chorbane', 'Hebira', 'Essouassi',
+    'El Djem', 'Chebba', 'Melloulech', 'Sidi Alouane', 'Ksour Essef',
+  ],
   'Sfax': [
-    'Sfax Ville', 'Sakiet Eddaier', 'Sakiet Ezzit', 'Thyna', 'El Ain',
-    'Gremda', 'Mahres', 'Kerkennah', 'Jebeniana',
+    'Sfax Ville', 'Sfax Ouest', 'Sakiet Ezzit', 'Sakiet Eddaïer', 'Sfax Sud',
+    'Tina', 'Agareb', 'Djebeniana', 'El Amra', 'El Hencha', 'Menzel Chaker',
+    'Ghraiba', 'Bir Ali Ben Kelifa', 'Skhira', 'Mahres', 'Kerkenah',
   ],
-  'Kairouan': ['Kairouan Ville', 'Haffouz', 'Chebika', 'Sbikha', 'Hajeb El Ayoun'],
-  'Kasserine': ['Kasserine Ville', 'Sbeitla', 'Thala', 'Foussana', 'Fériana'],
-  'Sidi Bouzid': ['Sidi Bouzid Ville', 'Regueb', 'Meknassy', 'Jelma', 'Bir El Hafey'],
-  'Gabès': ['Gabès Ville', 'Métouia', 'Mareth', 'Matmata', 'El Hamma'],
-  'Médenine': ['Médenine Ville', 'Djerba - Houmt Souk', 'Djerba - Midoun', 'Zarzis', 'Ben Gardane'],
-  'Tataouine': ['Tataouine Ville', 'Ghomrassen', 'Remada', 'Bir Lahmar'],
-  'Gafsa': ['Gafsa Ville', 'Métlaoui', 'Redeyef', 'El Ksar', 'Moularès'],
-  'Tozeur': ['Tozeur Ville', 'Nefta', 'Degache', 'Hazoua'],
-  'Kébili': ['Kébili Ville', 'Douz', 'Souk Lahad', 'El Faouar'],
+  'Kairouan': [
+    'Kairouan Nord', 'Kairouan Sud', 'Echebika', 'Sbikha', 'El Ouslatia',
+    'Haffouz', 'El Alâa', 'Hajeb el Ayoun', 'Nasrallah', 'Echrarda', 'Bouhajla',
+  ],
+  'Kasserine': [
+    'Kasserine Nord', 'Kasserine Sud', 'Ezzouhour', 'Hassi Ferid', 'Sbeitla',
+    'Sbiba', 'Djedeliane', 'El Ayoun', 'Thala', 'Hidra', 'Foussana', 'Feriana',
+    'Majel Bel Abbès',
+  ],
+  'Sidi Bouzid': [
+    'Sidi Bouzid Ouest', 'Sidi Bouzid Est', 'Jilma', 'Cebalet Ouled Asker',
+    'Bir El Hafey', 'Sidi Ali Ben Aoûn', 'Menzel Bouzaïenne', 'Meknassy',
+    'Souk Jedid', 'Mezzouna', 'Regueb', 'Ouled Haffouz',
+  ],
+  'Gabès': [
+    'Gabes Medina', 'Gabes Ouest', 'Gabes Sud', 'Ghanouch', 'El Metouia',
+    'Menzel El Habib', 'El Hamma', 'Matmata', 'Nouvelle Matmata', 'Mareth',
+  ],
+  'Médenine': [
+    'Medenine Nord', 'Medenine Sud', 'Beni Khedech', 'Ben Guerdane', 'Zarzis',
+    'Djerba Houmet Souk', 'Djerba Midoun', 'Djerba Ajim', 'Sidi Makhloulf',
+  ],
+  'Tataouine': [
+    'Tataouine Nord', 'Tataouine Sud', 'Smâr', 'Bir Lahmar', 'Ghomrassen',
+    'Dhehiba', 'Remada',
+  ],
+  'Gafsa': [
+    'Gafsa Nord', 'Sidi Aïch', 'El Ksar', 'Gafsa Sud', 'Oum El Araies',
+    'Redeyef', 'Metlaoui', 'Mdhila', 'El Guetar', 'Belkhir', 'Sned',
+  ],
+  'Tozeur': [
+    'Tozeur', 'Degach', 'Tameghza', 'Nefta', 'Hazoua',
+  ],
+  'Kébili': [
+    'Kebili Sud', 'Kebeli Nord', 'Souk El Ahed', 'Douz Nord', 'Douz Sud', 'Faouar',
+  ],
 };
