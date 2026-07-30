@@ -11,6 +11,41 @@ const GOVERNORATES = [
   'Tataouine', 'Gafsa', 'Tozeur', 'Kébili',
 ];
 
+// Teacher's own qualification/degree (single choice on the dashboard).
+const DEGREES = [
+  'Enseignant primaire',
+  'Enseignant préparatoire',
+  'Enseignant secondaire',
+  'Enseignant universitaire',
+  'Étudiant',
+  'Autre',
+];
+
+// Years of experience (single choice on the dashboard).
+const EXPERIENCE = [
+  '1 à 5 ans',
+  '5 à 10 ans',
+  '10 à 15 ans',
+  'Plus de 15 ans',
+];
+
+// Levels a teacher can teach, grouped by stage. Single source of truth used by
+// the teacher dashboard form AND the parent search filter.
+const LEVELS = [
+  { group: 'Primaire', items: [
+    'Primaire 1', 'Primaire 2', 'Primaire 3', 'Primaire 4', 'Primaire 5', 'Primaire 6',
+  ]},
+  { group: 'Préparatoire', items: [
+    'Préparatoire 7', 'Préparatoire 8', 'Préparatoire 9',
+  ]},
+  { group: 'Secondaire', items: [
+    'Secondaire 1', 'Secondaire 2', 'Secondaire 3', 'Secondaire 4',
+  ]},
+  { group: 'Université', items: [
+    'Université L1', 'Université L2', 'Université L3',
+  ]},
+];
+
 router.get('/subjects', async (req, res) => {
   try {
     const result = await pool.query('SELECT id, name FROM subjects ORDER BY name');
@@ -32,6 +67,18 @@ router.get('/areas', (req, res) => {
   }
   const areas = AREAS_BY_GOVERNORATE[governorate] || [];
   res.json({ areas });
+});
+
+router.get('/degrees', (req, res) => {
+  res.json({ degrees: DEGREES });
+});
+
+router.get('/experience', (req, res) => {
+  res.json({ experience: EXPERIENCE });
+});
+
+router.get('/levels', (req, res) => {
+  res.json({ levels: LEVELS });
 });
 
 module.exports = router;
