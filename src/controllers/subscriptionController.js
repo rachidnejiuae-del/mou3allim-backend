@@ -13,7 +13,7 @@ async function redeem(req, res) {
     await client.query('BEGIN');
 
     const profileResult = await client.query(
-      'SELECT id FROM teacher_profiles WHERE user_id = $1',
+      'SELECT id, governorate, degree, experience FROM teacher_profiles WHERE user_id = $1',
       [req.user.id]
     );
     if (profileResult.rows.length === 0) {
@@ -21,6 +21,28 @@ async function redeem(req, res) {
       return res.status(404).json({ error: 'Profil professeur introuvable.' });
     }
     const teacherId = profileResult.rows[0].id;
+    const profile = profileResult.rows[0];
+
+    // Profile must be COMPLETE before a code can be redeemed — a teacher can only
+    // go live once parents have full information. Checks the same fields the
+    // dashboard requires to save.
+    const [subjCount, levelCount] = await Promise.all([
+      client.query('SELECT COUNT(*)::int AS n FROM teacher_subjects WHERE teacher_id = $1', [teacherId]),
+      client.query('SELECT COUNT(*)::int AS n FROM teacher_levels WHERE teacher_id = $1', [teacherId]),
+    ]);
+    const missing = [];
+    if (!profile.degree) missing.push('le diplôme');
+    if (!profile.experience) missing.push("l'expérience");
+    if (!profile.governorate) missing.push('le gouvernorat');
+    if (subjCount.rows[0].n === 0) missing.push('au moins une matière avec un prix');
+    if (levelCount.rows[0].n === 0) missing.push('au moins un niveau enseigné');
+    if (missing.length > 0) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        error: 'Veuillez compléter votre profil avant d\'activer votre abonnement. Il manque : '
+          + missing.join(', ') + '.',
+      });
+    }
 
     // Lock the code row to prevent two requests redeeming it at the same time
     const codeResult = await client.query(
