@@ -21,13 +21,14 @@ app.set('trust proxy', 1);
 
 app.use(helmet());
 
-// Allowlist instead of wide-open CORS. Includes the new custom domain
-// (mou3allim.com) plus the Netlify URL kept during the transition, and the
-// localhost/file:// origins for dev and the local admin dashboard.
+// Allowlist instead of wide-open CORS. Includes the custom domain, the Netlify
+// URLs, the hosted admin dashboard, and the localhost/file:// origins for dev
+// and the local admin dashboard.
 const ALLOWED_ORIGINS = [
   'https://mou3allim.com',
   'https://www.mou3allim.com',
   'https://steady-puffpuff-806d91.netlify.app',
+  'https://mou3allim-admin.netlify.app',
   'http://localhost:3000',
   'http://localhost:5173',
   'http://127.0.0.1:5500',
