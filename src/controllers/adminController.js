@@ -52,7 +52,6 @@ async function listAll(req, res) {
       params
     );
 
-    // Attach degree/experience/subjects/levels for each teacher (admin detail view).
     const teachers = await Promise.all(result.rows.map(async (t) => {
       const [degExp, subs, levels] = await Promise.all([
         pool.query('SELECT degree, experience FROM teacher_profiles WHERE id = $1', [t.id]),
@@ -122,8 +121,6 @@ async function approve(req, res) {
     );
 
     if (wantTrial) {
-      // Only grant if they don't already have an active subscription, so a trial
-      // never shortens or duplicates a paying teacher's access.
       const active = await pool.query(
         `SELECT id FROM subscriptions
          WHERE teacher_id = $1 AND payment_status = 'paid' AND ends_at > NOW()
@@ -133,7 +130,7 @@ async function approve(req, res) {
       if (active.rows.length === 0) {
         await pool.query(
           `INSERT INTO subscriptions (teacher_id, plan, amount, payment_status, payment_reference, starts_at, ends_at)
-           VALUES ($1, 'trial', 0, 'paid', 'trial:approval-7d', NOW(), NOW() + INTERVAL '7 days')`,
+           VALUES ($1, 'monthly', 0, 'paid', 'trial:approval-7d', NOW(), NOW() + INTERVAL '7 days')`,
           [req.params.id]
         );
         return res.json({ message: 'Profil approuvé. Essai gratuit de 7 jours activé.' });
