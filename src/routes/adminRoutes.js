@@ -2,7 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { normalizePhone } = require('../utils/phone');
-const { listPending, listAll, getStats, approve, reject, suspend } = require('../controllers/adminController');
+const { listPending, listAll, getStats, approve, reject, suspend, deleteTeacher } = require('../controllers/adminController');
 const { generate, list: listCodes, disable } = require('../controllers/codeController');
 const { hide, unhide } = require('../controllers/ratingController');
 const pool = require('../db/pool');
@@ -18,6 +18,7 @@ router.get('/teachers', listAll);
 router.patch('/teachers/:id/approve', approve);
 router.patch('/teachers/:id/reject', reject);
 router.patch('/teachers/:id/suspend', suspend);
+router.delete('/teachers/:id', deleteTeacher);
 
 router.post('/codes/generate', generate);
 router.get('/codes', listCodes);
