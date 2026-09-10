@@ -9,6 +9,7 @@ const teacherRoutes = require('./routes/teacherRoutes');
 const subscriptionRoutes = require('./routes/subscriptionRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const lookupRoutes = require('./routes/lookupRoutes');
+const metricsRoutes = require('./routes/metricsRoutes');
 const { globalLimiter } = require('./middleware/rateLimit');
 
 const app = express();
@@ -56,6 +57,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/teachers', teacherRoutes);
 app.use('/api/subscriptions', subscriptionRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api', metricsRoutes);
 app.use('/api', lookupRoutes);
 
 // Centralized error handler (e.g. multer file errors)
