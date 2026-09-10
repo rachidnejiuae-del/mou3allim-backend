@@ -110,9 +110,6 @@ async function getStats(req, res) {
 }
 
 async function approve(req, res) {
-  // ?trial=1 (or body { trial: true }) also grants a 7-day free trial so the
-  // teacher appears in search immediately. Without it, approval alone does NOT
-  // make them visible — they must redeem a paid code (original behavior).
   const wantTrial = req.query.trial === '1' || req.query.trial === 'true' || (req.body && req.body.trial === true);
   try {
     await pool.query(
@@ -173,4 +170,35 @@ async function suspend(req, res) {
   }
 }
 
-module.exports = { listPending, listAll, getStats, approve, reject, suspend };
+async function deleteTeacher(req, res) {
+  const teacherId = req.params.id;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const prof = await client.query('SELECT user_id FROM teacher_profiles WHERE id = $1', [teacherId]);
+    if (prof.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Professeur introuvable.' });
+    }
+    const userId = prof.rows[0].user_id;
+
+    // Delete everything, including this teacher's prepaid codes (the FK on
+    // prepaid_codes.used_by_teacher_id has no cascade, so remove those rows
+    // explicitly first), then delete the user which cascades to the profile,
+    // subjects, levels, areas, subscriptions and ratings.
+    await client.query('DELETE FROM prepaid_codes WHERE used_by_teacher_id = $1', [teacherId]);
+    await client.query('DELETE FROM users WHERE id = $1', [userId]);
+
+    await client.query('COMMIT');
+    res.json({ message: 'Compte supprimé définitivement.' });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur lors de la suppression.' });
+  } finally {
+    client.release();
+  }
+}
+
+module.exports = { listPending, listAll, getStats, approve, reject, suspend, deleteTeacher };
