@@ -51,7 +51,27 @@ async function listAll(req, res) {
        ORDER BY tp.created_at DESC`,
       params
     );
-    res.json({ teachers: result.rows });
+
+    // Attach degree/experience/subjects/levels for each teacher (admin detail view).
+    const teachers = await Promise.all(result.rows.map(async (t) => {
+      const [degExp, subs, levels] = await Promise.all([
+        pool.query('SELECT degree, experience FROM teacher_profiles WHERE id = $1', [t.id]),
+        pool.query(
+          `SELECT sub.name, ts.price_per_hour
+           FROM teacher_subjects ts JOIN subjects sub ON sub.id = ts.subject_id
+           WHERE ts.teacher_id = $1`, [t.id]),
+        pool.query('SELECT level_name FROM teacher_levels WHERE teacher_id = $1', [t.id]),
+      ]);
+      return {
+        ...t,
+        degree: degExp.rows[0] ? degExp.rows[0].degree : null,
+        experience: degExp.rows[0] ? degExp.rows[0].experience : null,
+        subjects: subs.rows,
+        levels: levels.rows.map((r) => r.level_name),
+      };
+    }));
+
+    res.json({ teachers });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erreur serveur.' });
