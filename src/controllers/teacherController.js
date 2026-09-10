@@ -137,7 +137,17 @@ async function search(req, res) {
   const { subject, governorate, area, level, degree, q } = req.query;
 
   try {
-    const conditions = [`tp.status = 'approved'`, `s.payment_status = 'paid'`, `s.ends_at > NOW()`];
+    const conditions = [
+      `tp.status = 'approved'`,
+      `s.payment_status = 'paid'`,
+      `s.ends_at > NOW()`,
+      // Completeness guard: never show an incomplete profile in search, even if
+      // approved + subscribed. Must have a degree, at least one subject, and at
+      // least one level.
+      `tp.degree IS NOT NULL`,
+      `EXISTS (SELECT 1 FROM teacher_subjects tsx WHERE tsx.teacher_id = tp.id)`,
+      `EXISTS (SELECT 1 FROM teacher_levels tlx WHERE tlx.teacher_id = tp.id)`,
+    ];
     const params = [];
 
     if (governorate) {
