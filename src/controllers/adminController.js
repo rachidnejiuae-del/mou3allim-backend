@@ -111,33 +111,37 @@ async function getStats(req, res) {
 }
 
 async function approve(req, res) {
+  // ?trial=1 (or body { trial: true }) also grants a 7-day free trial so the
+  // teacher appears in search immediately. Without it, approval alone does NOT
+  // make them visible — they must redeem a paid code (original behavior).
+  const wantTrial = req.query.trial === '1' || req.query.trial === 'true' || (req.body && req.body.trial === true);
   try {
     await pool.query(
       `UPDATE teacher_profiles SET status = 'approved', rejection_reason = NULL, updated_at = NOW() WHERE id = $1`,
       [req.params.id]
     );
 
-    // Grant a 7-day FREE TRIAL on approval so the teacher appears in search
-    // immediately, even before paying. Uses the same subscription shape as a
-    // redeemed code (payment_status 'paid' so existing search logic shows them),
-    // marked with a 'trial' reference. After 7 days it expires like any sub.
-    // Only granted if they don't already have an active subscription (so
-    // re-approving a paid teacher never shortens or duplicates their access).
-    const active = await pool.query(
-      `SELECT id FROM subscriptions
-       WHERE teacher_id = $1 AND payment_status = 'paid' AND ends_at > NOW()
-       LIMIT 1`,
-      [req.params.id]
-    );
-    if (active.rows.length === 0) {
-      await pool.query(
-        `INSERT INTO subscriptions (teacher_id, plan, amount, payment_status, payment_reference, starts_at, ends_at)
-         VALUES ($1, 'trial', 0, 'paid', 'trial:approval-7d', NOW(), NOW() + INTERVAL '7 days')`,
+    if (wantTrial) {
+      // Only grant if they don't already have an active subscription, so a trial
+      // never shortens or duplicates a paying teacher's access.
+      const active = await pool.query(
+        `SELECT id FROM subscriptions
+         WHERE teacher_id = $1 AND payment_status = 'paid' AND ends_at > NOW()
+         LIMIT 1`,
         [req.params.id]
       );
+      if (active.rows.length === 0) {
+        await pool.query(
+          `INSERT INTO subscriptions (teacher_id, plan, amount, payment_status, payment_reference, starts_at, ends_at)
+           VALUES ($1, 'trial', 0, 'paid', 'trial:approval-7d', NOW(), NOW() + INTERVAL '7 days')`,
+          [req.params.id]
+        );
+        return res.json({ message: 'Profil approuvé. Essai gratuit de 7 jours activé.' });
+      }
+      return res.json({ message: 'Profil approuvé (abonnement déjà actif, pas de nouvel essai).' });
     }
 
-    res.json({ message: 'Profil approuvé. Essai gratuit de 7 jours activé.' });
+    res.json({ message: 'Profil approuvé.' });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erreur serveur.' });
