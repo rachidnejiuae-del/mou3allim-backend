@@ -47,7 +47,6 @@ async function getMyProfile(req, res) {
 async function updateMyProfile(req, res) {
   const { bio, governorate, latitude, longitude, subjects, areas, degree, experience, levels } = req.body;
 
-  // All teacher fields are required to save a complete, listable profile.
   if (!degree) return res.status(400).json({ error: 'Veuillez choisir votre niveau / diplôme.' });
   if (!experience) return res.status(400).json({ error: 'Veuillez choisir votre expérience.' });
   if (!Array.isArray(levels) || levels.length === 0) {
@@ -135,15 +134,14 @@ async function uploadPhoto(req, res) {
 
 async function search(req, res) {
   const { subject, governorate, area, level, degree, q } = req.query;
+  const PAGE_SIZE = 24;
+  const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
 
   try {
     const conditions = [
       `tp.status = 'approved'`,
       `s.payment_status = 'paid'`,
       `s.ends_at > NOW()`,
-      // Completeness guard: never show an incomplete profile in search, even if
-      // approved + subscribed. Must have a degree, at least one subject, and at
-      // least one level.
       `tp.degree IS NOT NULL`,
       `EXISTS (SELECT 1 FROM teacher_subjects tsx WHERE tsx.teacher_id = tp.id)`,
       `EXISTS (SELECT 1 FROM teacher_levels tlx WHERE tlx.teacher_id = tp.id)`,
@@ -202,11 +200,13 @@ async function search(req, res) {
       LEFT JOIN ratings r ON r.teacher_id = tp.id
       WHERE ${conditions.join(' AND ')} ${subjectFilter} ${areaFilter} ${levelFilter}
       GROUP BY tp.id, u.full_name, u.gender, tp.photo_url, tp.governorate, tp.bio, tp.degree, tp.experience
-      ORDER BY rating DESC
-      LIMIT 50;
+      ORDER BY rating DESC, tp.id DESC
+      LIMIT ${PAGE_SIZE + 1} OFFSET ${offset};
     `;
 
     const result = await pool.query(sql, params);
+    const hasMore = result.rows.length > PAGE_SIZE;
+    if (hasMore) result.rows = result.rows.slice(0, PAGE_SIZE);
 
     const teachers = await Promise.all(
       result.rows.map(async (t) => {
@@ -230,7 +230,7 @@ async function search(req, res) {
       })
     );
 
-    res.json({ teachers });
+    res.json({ teachers, hasMore, offset, pageSize: PAGE_SIZE });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erreur serveur lors de la recherche.' });
