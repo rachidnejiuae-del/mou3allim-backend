@@ -79,7 +79,7 @@ async function listAll(req, res) {
 
 async function getStats(req, res) {
   try {
-    const [totalResult, statusResult, activeSubsResult, ratingsResult] = await Promise.all([
+    const [totalResult, statusResult, activeSubsResult, trialResult, paidResult, ratingsResult] = await Promise.all([
       pool.query(`SELECT COUNT(*)::int AS count FROM teacher_profiles`),
       pool.query(`
         SELECT status, COUNT(*)::int AS count
@@ -91,6 +91,20 @@ async function getStats(req, res) {
         FROM subscriptions
         WHERE payment_status = 'paid' AND ends_at > NOW()
       `),
+      // On a free trial: active subscription flagged as trial.
+      pool.query(`
+        SELECT COUNT(DISTINCT teacher_id)::int AS count
+        FROM subscriptions
+        WHERE payment_status = 'paid' AND ends_at > NOW()
+          AND payment_reference = 'trial:approval-7d'
+      `),
+      // Really paying: active subscription from a redeemed prepaid code.
+      pool.query(`
+        SELECT COUNT(DISTINCT teacher_id)::int AS count
+        FROM subscriptions
+        WHERE payment_status = 'paid' AND ends_at > NOW()
+          AND payment_reference LIKE 'prepaid:%'
+      `),
       pool.query(`SELECT COUNT(*)::int AS count FROM ratings WHERE hidden = FALSE`),
     ]);
 
@@ -101,6 +115,8 @@ async function getStats(req, res) {
       total_teachers: totalResult.rows[0].count,
       by_status: statusCounts,
       active_subscriptions: activeSubsResult.rows[0].count,
+      trial_teachers: trialResult.rows[0].count,
+      paid_teachers: paidResult.rows[0].count,
       total_ratings: ratingsResult.rows[0].count,
     });
   } catch (err) {
@@ -183,10 +199,6 @@ async function deleteTeacher(req, res) {
     }
     const userId = prof.rows[0].user_id;
 
-    // Delete everything, including this teacher's prepaid codes (the FK on
-    // prepaid_codes.used_by_teacher_id has no cascade, so remove those rows
-    // explicitly first), then delete the user which cascades to the profile,
-    // subjects, levels, areas, subscriptions and ratings.
     await client.query('DELETE FROM prepaid_codes WHERE used_by_teacher_id = $1', [teacherId]);
     await client.query('DELETE FROM users WHERE id = $1', [userId]);
 
