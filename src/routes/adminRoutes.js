@@ -2,7 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { normalizePhone } = require('../utils/phone');
-const { listPending, listAll, getStats, approve, reject, suspend, deleteTeacher } = require('../controllers/adminController');
+const { listPending, listAll, getStats, approve, reject, suspend, deleteTeacher, listTrials } = require('../controllers/adminController');
 const { generate, list: listCodes, disable } = require('../controllers/codeController');
 const { hide, unhide } = require('../controllers/ratingController');
 const pool = require('../db/pool');
@@ -19,6 +19,7 @@ router.patch('/teachers/:id/approve', approve);
 router.patch('/teachers/:id/reject', reject);
 router.patch('/teachers/:id/suspend', suspend);
 router.delete('/teachers/:id', deleteTeacher);
+router.get('/trials', listTrials);
 
 router.post('/codes/generate', generate);
 router.get('/codes', listCodes);
@@ -28,7 +29,6 @@ router.patch('/ratings/:ratingId/hide', hide);
 router.patch('/ratings/:ratingId/unhide', unhide);
 
 // ---- Identity verification for manual (WhatsApp) password resets ----------
-// Step 1: admin enters the phone, gets the account's security QUESTION to ask.
 router.get('/verify-identity', async (req, res) => {
   const phone = normalizePhone(req.query.phone);
   if (!phone) return res.status(400).json({ error: 'Numéro invalide.' });
@@ -47,8 +47,6 @@ router.get('/verify-identity', async (req, res) => {
   }
 });
 
-// Step 2: admin enters the answer the person gave; server says match or not.
-// The stored answer is hashed, so it is never exposed — not even to the admin.
 router.post('/verify-identity', async (req, res) => {
   const phone = normalizePhone(req.body.phone);
   const answer = req.body.answer;
@@ -67,8 +65,6 @@ router.post('/verify-identity', async (req, res) => {
   }
 });
 
-// Admin sets a new password AFTER verifying identity (manual WhatsApp reset).
-// This is the closing step of the Vérifier identité workflow.
 router.post('/reset-password', async (req, res) => {
   const phone = normalizePhone(req.body.phone);
   const newPassword = req.body.new_password;
