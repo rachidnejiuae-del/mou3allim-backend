@@ -91,14 +91,12 @@ async function getStats(req, res) {
         FROM subscriptions
         WHERE payment_status = 'paid' AND ends_at > NOW()
       `),
-      // On a free trial: active subscription flagged as trial.
       pool.query(`
         SELECT COUNT(DISTINCT teacher_id)::int AS count
         FROM subscriptions
         WHERE payment_status = 'paid' AND ends_at > NOW()
           AND payment_reference = 'trial:approval-7d'
       `),
-      // Really paying: active subscription from a redeemed prepaid code.
       pool.query(`
         SELECT COUNT(DISTINCT teacher_id)::int AS count
         FROM subscriptions
@@ -213,4 +211,45 @@ async function deleteTeacher(req, res) {
   }
 }
 
-module.exports = { listPending, listAll, getStats, approve, reject, suspend, deleteTeacher };
+async function listTrials(req, res) {
+  try {
+    const endingSoon = await pool.query(`
+      SELECT tp.id, u.full_name, u.phone, tp.governorate, s.ends_at,
+             CEIL(EXTRACT(EPOCH FROM (s.ends_at - NOW()))/86400)::int AS days_left
+      FROM teacher_profiles tp
+      JOIN users u ON u.id = tp.user_id
+      JOIN subscriptions s ON s.teacher_id = tp.id
+      WHERE s.payment_status = 'paid'
+        AND s.payment_reference = 'trial:approval-7d'
+        AND s.ends_at > NOW()
+        AND s.ends_at <= NOW() + INTERVAL '2 days'
+      ORDER BY s.ends_at ASC
+    `);
+
+    const endedUnpaid = await pool.query(`
+      SELECT DISTINCT tp.id, u.full_name, u.phone, tp.governorate,
+             MAX(s.ends_at) AS trial_ended_at,
+             tp.status
+      FROM teacher_profiles tp
+      JOIN users u ON u.id = tp.user_id
+      JOIN subscriptions s ON s.teacher_id = tp.id
+      WHERE s.payment_reference = 'trial:approval-7d'
+        AND s.ends_at <= NOW()
+        AND NOT EXISTS (
+          SELECT 1 FROM subscriptions s2
+          WHERE s2.teacher_id = tp.id
+            AND s2.payment_status = 'paid'
+            AND s2.ends_at > NOW()
+        )
+      GROUP BY tp.id, u.full_name, u.phone, tp.governorate, tp.status
+      ORDER BY MAX(s.ends_at) DESC
+    `);
+
+    res.json({ ending_soon: endingSoon.rows, ended_unpaid: endedUnpaid.rows });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur.' });
+  }
+}
+
+module.exports = { listPending, listAll, getStats, approve, reject, suspend, deleteTeacher, listTrials };
