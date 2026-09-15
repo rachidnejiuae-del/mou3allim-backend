@@ -3,7 +3,6 @@ const pool = require('../db/pool');
 const PLAN_DAYS = { monthly: 30, yearly: 365 };
 
 // POST /api/subscriptions/redeem — teacher activates subscription with a prepaid code
-// body: { code: "MOU3-XXXX-XXXX" }
 async function redeem(req, res) {
   const { code } = req.body;
   if (!code) return res.status(400).json({ error: 'Le code est requis.' });
@@ -23,9 +22,6 @@ async function redeem(req, res) {
     const teacherId = profileResult.rows[0].id;
     const profile = profileResult.rows[0];
 
-    // Profile must be COMPLETE before a code can be redeemed — a teacher can only
-    // go live once parents have full information. Checks the same fields the
-    // dashboard requires to save.
     const [subjCount, levelCount] = await Promise.all([
       client.query('SELECT COUNT(*)::int AS n FROM teacher_subjects WHERE teacher_id = $1', [teacherId]),
       client.query('SELECT COUNT(*)::int AS n FROM teacher_levels WHERE teacher_id = $1', [teacherId]),
@@ -44,7 +40,6 @@ async function redeem(req, res) {
       });
     }
 
-    // Lock the code row to prevent two requests redeeming it at the same time
     const codeResult = await client.query(
       `SELECT * FROM prepaid_codes WHERE code = $1 FOR UPDATE`,
       [code.trim().toUpperCase()]
@@ -89,6 +84,7 @@ async function redeem(req, res) {
     client.release();
   }
 }
+
 // GET /api/subscriptions/me — teacher checks their own subscription status
 async function getMySubscription(req, res) {
   try {
@@ -101,7 +97,7 @@ async function getMySubscription(req, res) {
     }
     const teacherId = profileResult.rows[0].id;
     const result = await pool.query(
-      `SELECT plan, starts_at, ends_at, payment_status
+      `SELECT plan, starts_at, ends_at, payment_status, payment_reference
        FROM subscriptions
        WHERE teacher_id = $1 AND payment_status = 'paid'
        ORDER BY ends_at DESC LIMIT 1`,
