@@ -2,7 +2,7 @@ const express = require('express');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { upload } = require('../middleware/upload');
 const {
-  getMyProfile, updateMyProfile, uploadPhoto, search, getById,
+  getMyProfile, updateMyProfile, uploadPhoto, removePhoto, search, getById,
 } = require('../controllers/teacherController');
 const { rate, list: listRatings } = require('../controllers/ratingController');
 
@@ -12,6 +12,7 @@ const router = express.Router();
 router.get('/me', authenticate, requireRole('teacher'), getMyProfile);
 router.put('/me', authenticate, requireRole('teacher'), updateMyProfile);
 router.post('/me/photo', authenticate, requireRole('teacher'), upload.single('photo'), uploadPhoto);
+router.delete('/me/photo', authenticate, requireRole('teacher'), removePhoto);
 
 // Public
 router.get('/search', search);
