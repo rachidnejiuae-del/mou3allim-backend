@@ -20,7 +20,7 @@ async function listPending(req, res) {
 }
 
 async function listAll(req, res) {
-  const { status } = req.query;
+  const { status, filter } = req.query;
   try {
     const params = [];
     let conditions = '';
@@ -52,23 +52,42 @@ async function listAll(req, res) {
       params
     );
 
-    const teachers = await Promise.all(result.rows.map(async (t) => {
-      const [degExp, subs, levels] = await Promise.all([
+    let teachers = await Promise.all(result.rows.map(async (t) => {
+      const [degExp, subs, levels, activeSub, hadTrial] = await Promise.all([
         pool.query('SELECT degree, experience FROM teacher_profiles WHERE id = $1', [t.id]),
         pool.query(
           `SELECT sub.name, ts.price_per_hour
            FROM teacher_subjects ts JOIN subjects sub ON sub.id = ts.subject_id
            WHERE ts.teacher_id = $1`, [t.id]),
         pool.query('SELECT level_name FROM teacher_levels WHERE teacher_id = $1', [t.id]),
+        pool.query(
+          `SELECT payment_reference FROM subscriptions
+           WHERE teacher_id = $1 AND payment_status = 'paid' AND ends_at > NOW()
+           ORDER BY ends_at DESC LIMIT 1`, [t.id]),
+        pool.query(
+          `SELECT 1 FROM subscriptions
+           WHERE teacher_id = $1 AND payment_reference = 'trial:approval-7d' LIMIT 1`, [t.id]),
       ]);
+      const activeRef = activeSub.rows[0] ? activeSub.rows[0].payment_reference : null;
+      const hasActive = !!activeRef;
+      const isPaid = activeRef && activeRef.indexOf('prepaid:') === 0;
+      const isTrialActive = activeRef === 'trial:approval-7d';
+      // Trial expired: approved, previously had a trial, and no active subscription now.
+      const trialExpired = t.status === 'approved' && hadTrial.rows.length > 0 && !hasActive;
       return {
         ...t,
         degree: degExp.rows[0] ? degExp.rows[0].degree : null,
         experience: degExp.rows[0] ? degExp.rows[0].experience : null,
         subjects: subs.rows,
         levels: levels.rows.map((r) => r.level_name),
+        sub_state: isPaid ? 'paid' : (isTrialActive ? 'trial' : (trialExpired ? 'trial_expired' : 'none')),
+        trial_expired: trialExpired,
       };
     }));
+
+    if (filter === 'trial_expired') {
+      teachers = teachers.filter((t) => t.trial_expired);
+    }
 
     res.json({ teachers });
   } catch (err) {
