@@ -72,7 +72,6 @@ async function listAll(req, res) {
       const hasActive = !!activeRef;
       const isPaid = activeRef && activeRef.indexOf('prepaid:') === 0;
       const isTrialActive = activeRef === 'trial:approval-7d';
-      // Trial expired: approved, previously had a trial, and no active subscription now.
       const trialExpired = t.status === 'approved' && hadTrial.rows.length > 0 && !hasActive;
       return {
         ...t,
@@ -98,7 +97,7 @@ async function listAll(req, res) {
 
 async function getStats(req, res) {
   try {
-    const [totalResult, statusResult, activeSubsResult, trialResult, paidResult, ratingsResult] = await Promise.all([
+    const [totalResult, statusResult, activeSubsResult, trialResult, paidResult, expiredTrialsResult, ratingsResult] = await Promise.all([
       pool.query(`SELECT COUNT(*)::int AS count FROM teacher_profiles`),
       pool.query(`
         SELECT status, COUNT(*)::int AS count
@@ -122,6 +121,12 @@ async function getStats(req, res) {
         WHERE payment_status = 'paid' AND ends_at > NOW()
           AND payment_reference LIKE 'prepaid:%'
       `),
+      pool.query(`
+        SELECT COUNT(*)::int AS count FROM teacher_profiles tp
+        WHERE tp.status = 'approved'
+          AND EXISTS (SELECT 1 FROM subscriptions s WHERE s.teacher_id = tp.id AND s.payment_reference = 'trial:approval-7d')
+          AND NOT EXISTS (SELECT 1 FROM subscriptions s2 WHERE s2.teacher_id = tp.id AND s2.payment_status = 'paid' AND s2.ends_at > NOW())
+      `),
       pool.query(`SELECT COUNT(*)::int AS count FROM ratings WHERE hidden = FALSE`),
     ]);
 
@@ -134,6 +139,7 @@ async function getStats(req, res) {
       active_subscriptions: activeSubsResult.rows[0].count,
       trial_teachers: trialResult.rows[0].count,
       paid_teachers: paidResult.rows[0].count,
+      expired_trials: expiredTrialsResult.rows[0].count,
       total_ratings: ratingsResult.rows[0].count,
     });
   } catch (err) {
