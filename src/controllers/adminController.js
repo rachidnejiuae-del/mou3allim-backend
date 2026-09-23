@@ -33,56 +33,68 @@ async function listAll(req, res) {
       conditions = `WHERE tp.status = $${params.length}`;
     }
 
+    // One query instead of ~5 per teacher. Subjects/levels are aggregated as JSON,
+    // the active paid subscription reference is picked via a LATERAL subquery
+    // (ordered by ends_at DESC, same as before), and whether the teacher ever had a
+    // trial is a boolean EXISTS. Same output shape as the previous per-row version.
     const result = await pool.query(
       `SELECT tp.id, u.full_name, u.phone, u.gender, tp.governorate, tp.bio,
               tp.photo_url, tp.certificate_url, tp.status, tp.rejection_reason,
-              tp.created_at, tp.updated_at,
-              COALESCE(AVG(r.score), 0)::float AS rating,
-              COUNT(DISTINCT r.id) AS rating_count,
-              s.plan, s.ends_at, s.payment_status
+              tp.created_at, tp.updated_at, tp.degree, tp.experience,
+              COALESCE(rt.rating, 0)::float AS rating,
+              COALESCE(rt.rating_count, 0) AS rating_count,
+              act.plan, act.ends_at, act.payment_status, act.payment_reference AS active_ref,
+              (had_trial.teacher_id IS NOT NULL) AS had_trial,
+              COALESCE(subj.subjects, '[]'::json) AS subjects,
+              COALESCE(lvl.levels, '[]'::json) AS levels
        FROM teacher_profiles tp
        JOIN users u ON u.id = tp.user_id
-       LEFT JOIN ratings r ON r.teacher_id = tp.id
-       LEFT JOIN subscriptions s ON s.teacher_id = tp.id AND s.payment_status = 'paid' AND s.ends_at > NOW()
+       LEFT JOIN LATERAL (
+         SELECT AVG(r.score)::float AS rating, COUNT(DISTINCT r.id) AS rating_count
+         FROM ratings r WHERE r.teacher_id = tp.id
+       ) rt ON TRUE
+       LEFT JOIN LATERAL (
+         SELECT s.plan, s.ends_at, s.payment_status, s.payment_reference
+         FROM subscriptions s
+         WHERE s.teacher_id = tp.id AND s.payment_status = 'paid' AND s.ends_at > NOW()
+         ORDER BY s.ends_at DESC LIMIT 1
+       ) act ON TRUE
+       LEFT JOIN LATERAL (
+         SELECT tp.id AS teacher_id
+         WHERE EXISTS (
+           SELECT 1 FROM subscriptions s2
+           WHERE s2.teacher_id = tp.id AND s2.payment_reference = 'trial:approval-7d'
+         )
+       ) had_trial ON TRUE
+       LEFT JOIN LATERAL (
+         SELECT json_agg(json_build_object('name', sub.name, 'price_per_hour', ts.price_per_hour)) AS subjects
+         FROM teacher_subjects ts JOIN subjects sub ON sub.id = ts.subject_id
+         WHERE ts.teacher_id = tp.id
+       ) subj ON TRUE
+       LEFT JOIN LATERAL (
+         SELECT json_agg(tl.level_name) AS levels
+         FROM teacher_levels tl WHERE tl.teacher_id = tp.id
+       ) lvl ON TRUE
        ${conditions}
-       GROUP BY tp.id, u.full_name, u.phone, u.gender, tp.governorate, tp.bio,
-                tp.photo_url, tp.certificate_url, tp.status, tp.rejection_reason,
-                tp.created_at, tp.updated_at, s.plan, s.ends_at, s.payment_status
        ORDER BY tp.created_at DESC`,
       params
     );
 
-    let teachers = await Promise.all(result.rows.map(async (t) => {
-      const [degExp, subs, levels, activeSub, hadTrial] = await Promise.all([
-        pool.query('SELECT degree, experience FROM teacher_profiles WHERE id = $1', [t.id]),
-        pool.query(
-          `SELECT sub.name, ts.price_per_hour
-           FROM teacher_subjects ts JOIN subjects sub ON sub.id = ts.subject_id
-           WHERE ts.teacher_id = $1`, [t.id]),
-        pool.query('SELECT level_name FROM teacher_levels WHERE teacher_id = $1', [t.id]),
-        pool.query(
-          `SELECT payment_reference FROM subscriptions
-           WHERE teacher_id = $1 AND payment_status = 'paid' AND ends_at > NOW()
-           ORDER BY ends_at DESC LIMIT 1`, [t.id]),
-        pool.query(
-          `SELECT 1 FROM subscriptions
-           WHERE teacher_id = $1 AND payment_reference = 'trial:approval-7d' LIMIT 1`, [t.id]),
-      ]);
-      const activeRef = activeSub.rows[0] ? activeSub.rows[0].payment_reference : null;
+    let teachers = result.rows.map((t) => {
+      const activeRef = t.active_ref || null;
       const hasActive = !!activeRef;
       const isPaid = activeRef && activeRef.indexOf('prepaid:') === 0;
       const isTrialActive = activeRef === 'trial:approval-7d';
-      const trialExpired = t.status === 'approved' && hadTrial.rows.length > 0 && !hasActive;
+      const trialExpired = t.status === 'approved' && t.had_trial && !hasActive;
+      const { active_ref, had_trial, ...rest } = t;
       return {
-        ...t,
-        degree: degExp.rows[0] ? degExp.rows[0].degree : null,
-        experience: degExp.rows[0] ? degExp.rows[0].experience : null,
-        subjects: subs.rows,
-        levels: levels.rows.map((r) => r.level_name),
+        ...rest,
+        subjects: t.subjects || [],
+        levels: t.levels || [],
         sub_state: isPaid ? 'paid' : (isTrialActive ? 'trial' : (trialExpired ? 'trial_expired' : 'none')),
         trial_expired: trialExpired,
       };
-    }));
+    });
 
     if (filter === 'trial_expired') {
       teachers = teachers.filter((t) => t.trial_expired);
