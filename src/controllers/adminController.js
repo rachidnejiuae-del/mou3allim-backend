@@ -83,7 +83,7 @@ async function listAll(req, res) {
     let teachers = result.rows.map((t) => {
       const activeRef = t.active_ref || null;
       const hasActive = !!activeRef;
-      const isPaid = activeRef && activeRef.indexOf('prepaid:') === 0;
+      const isPaid = activeRef && (activeRef.indexOf('prepaid:') === 0 || activeRef.indexOf('gift:') === 0);
       const isTrialActive = activeRef === 'trial:approval-7d';
       const trialExpired = t.status === 'approved' && t.had_trial && !hasActive;
       const { active_ref, had_trial, ...rest } = t;
@@ -289,4 +289,46 @@ async function listTrials(req, res) {
   }
 }
 
-module.exports = { listPending, listAll, getStats, approve, reject, suspend, deleteTeacher, listTrials };
+// POST /api/admin/teachers/:id/grant-free — admin gifts a free subscription (no code, amount 0).
+// Follows the same shape as the 7-day trial: plan 'monthly', paid, amount 0, tagged payment_reference.
+// If the teacher already has an active paid subscription, the free period is stacked AFTER it so
+// their remaining time is never shortened.
+async function grantFree(req, res) {
+  let months = parseInt((req.body && req.body.months), 10);
+  if (!Number.isFinite(months)) months = 1;
+  months = Math.min(Math.max(months, 1), 12);
+  const days = months * 30;
+  try {
+    const prof = await pool.query('SELECT id FROM teacher_profiles WHERE id = $1', [req.params.id]);
+    if (prof.rows.length === 0) {
+      return res.status(404).json({ error: 'Professeur introuvable.' });
+    }
+
+    const cur = await pool.query(
+      `SELECT MAX(ends_at) AS max_ends FROM subscriptions
+       WHERE teacher_id = $1 AND payment_status = 'paid' AND ends_at > NOW()`,
+      [req.params.id]
+    );
+    const base = cur.rows[0].max_ends; // null when no active subscription
+
+    const result = await pool.query(
+      `INSERT INTO subscriptions (teacher_id, plan, amount, payment_status, payment_reference, starts_at, ends_at)
+       VALUES ($1, 'monthly', 0, 'paid', $2, NOW(),
+               GREATEST(NOW(), COALESCE($3::timestamp, NOW())) + ($4 || ' days')::interval)
+       RETURNING id, plan, starts_at, ends_at`,
+      [req.params.id, `gift:${months}month-admin`, base, String(days)]
+    );
+
+    res.status(201).json({
+      message: months === 1
+        ? '1 mois gratuit accordé.'
+        : `${months} mois gratuits accordés.`,
+      subscription: result.rows[0],
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur lors de l\'octroi de l\'abonnement gratuit.' });
+  }
+}
+
+module.exports = { listPending, listAll, getStats, approve, reject, suspend, deleteTeacher, listTrials, grantFree };
